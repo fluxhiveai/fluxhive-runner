@@ -1,0 +1,2 @@
+# Override root-level "Core/" ignore (meant for Xcode, not src/squad/core/)
+!core/

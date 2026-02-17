@@ -1,0 +1,16 @@
+{
+  "name": "flux-runner-repo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "protobufjs"
+    ]
+  },
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "bundle": "pnpm -C packages/runner bundle"
+  }
+}
