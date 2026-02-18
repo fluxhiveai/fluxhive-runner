@@ -13,7 +13,7 @@ describe("PiExecutionBackend", () => {
   });
 
   it("fails preflight when models.json is missing", async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "flux-runner-pi-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "fluxhive-runner-pi-"));
     const backend = new PiExecutionBackend({ agentDir: dir });
 
     const result = await backend.preflight();
@@ -25,7 +25,7 @@ describe("PiExecutionBackend", () => {
   });
 
   it("passes preflight when models.json exists", async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "flux-runner-pi-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "fluxhive-runner-pi-"));
     await writeFile(path.join(dir, "models.json"), "{}", "utf8");
     const backend = new PiExecutionBackend({ agentDir: dir });
 

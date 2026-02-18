@@ -1,17 +1,17 @@
-# Flux Runner
+# FluxHive Runner
 
-Flux Runner is a lightweight daemon that connects an OpenClaw gateway to a Flux MCP backend.
+FluxHive Runner is a lightweight daemon that connects an OpenClaw gateway to a Flux MCP backend.
 
 It claims tasks, executes them via OpenClaw, and reports results back to Flux.
 
-This repo ships a **single-file executable** (`flux-runner.mjs`) via GitHub Releases for easy installation and updates on macOS and Linux.
+This repo ships a **single-file executable** (`fluxhive-runner.mjs`) via GitHub Releases for easy installation and updates on macOS and Linux.
 
 ## Download (Latest)
 
 Release assets:
 
-- `flux-runner.mjs`
-- `flux-runner.mjs.sha256`
+- `fluxhive-runner.mjs`
+- `fluxhive-runner.mjs.sha256`
 
 ## Run
 
@@ -24,7 +24,7 @@ Environment variables:
 Then:
 
 ```bash
-node flux-runner.mjs
+node fluxhive-runner.mjs
 ```
 
 ## Development
@@ -34,4 +34,3 @@ pnpm install
 pnpm test
 pnpm bundle
 ```
-

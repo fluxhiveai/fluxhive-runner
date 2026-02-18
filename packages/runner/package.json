@@ -1,14 +1,14 @@
 {
-  "name": "@flux/runner",
+  "name": "@fluxhive/runner",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "flux-runner": "./dist/flux-runner.mjs"
+    "fluxhive-runner": "./dist/fluxhive-runner.mjs"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "bundle": "node scripts/bundle.mjs",
-    "start": "node dist/flux-runner.mjs",
+    "start": "node dist/fluxhive-runner.mjs",
     "test": "vitest run"
   },
   "dependencies": {

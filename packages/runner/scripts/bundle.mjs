@@ -16,7 +16,7 @@ function getArg(name) {
 
 function resolveOutfile() {
   const raw = getArg("--outfile") || getArg("-o");
-  if (!raw) return path.resolve(runnerRoot, "dist/flux-runner.mjs");
+  if (!raw) return path.resolve(runnerRoot, "dist/fluxhive-runner.mjs");
   if (path.isAbsolute(raw)) return raw;
   return path.resolve(runnerRoot, raw);
 }
@@ -46,4 +46,3 @@ main().catch((err) => {
   console.error(err instanceof Error ? err.stack || err.message : String(err));
   process.exit(1);
 });
-

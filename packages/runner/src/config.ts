@@ -110,7 +110,7 @@ export async function loadRunnerConfig(): Promise<RunnerConfig> {
   const fluxToken = requiredEnv("FLUX_TOKEN");
   const fluxHost = requiredEnv("FLUX_HOST");
   const fluxOrgId = process.env.FLUX_ORG_ID?.trim() || null;
-  const runnerType = process.env.FLUX_RUNNER_TYPE?.trim() || "flux-openclaw-runner";
+  const runnerType = process.env.FLUX_RUNNER_TYPE?.trim() || "fluxhive-openclaw-runner";
   const runnerVersion = process.env.FLUX_RUNNER_VERSION?.trim() || "0.1.0";
   const runnerInstanceId = process.env.FLUX_RUNNER_ID?.trim() || randomUUID();
   const machineId = process.env.FLUX_MACHINE_ID?.trim() || process.env.HOSTNAME || "unknown";

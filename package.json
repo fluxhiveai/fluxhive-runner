@@ -1,5 +1,5 @@
 {
-  "name": "flux-runner-repo",
+  "name": "fluxhive-runner-repo",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.28.0",

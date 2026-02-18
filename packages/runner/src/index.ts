@@ -94,7 +94,7 @@ async function main() {
       token: config.openclawGatewayToken,
       password: config.openclawGatewayPassword,
       defaultAgentId: config.openclawAgentId,
-      clientName: "flux-runner",
+      clientName: "fluxhive-runner",
       clientVersion: config.runnerVersion,
       instanceId: config.runnerInstanceId,
     });

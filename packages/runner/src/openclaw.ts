@@ -126,7 +126,7 @@ export class OpenClawClient extends EventEmitter {
       minProtocol: 3,
       maxProtocol: 3,
       client: {
-        id: this.opts.clientName || "flux-runner",
+        id: this.opts.clientName || "fluxhive-runner",
         version: this.opts.clientVersion || "0.1.0",
         platform: process.platform,
         mode: "backend",

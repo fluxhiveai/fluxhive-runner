@@ -1,6 +1,6 @@
-# @flux/runner
+# @fluxhive/runner
 
-OpenClaw bridge runner for Flux MCP.
+OpenClaw bridge runner for Flux MCP, branded as FluxHive Runner.
 
 ## Environment
 
@@ -22,5 +22,3 @@ OpenClaw bridge runner for Flux MCP.
 pnpm -C packages/runner build
 pnpm -C packages/runner start
 ```
-
-Legacy worker entrypoint `apps/runner/scripts/mcp_runner.mjs` now delegates to this package.
