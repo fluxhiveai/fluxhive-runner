@@ -3,6 +3,17 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import WebSocket from "ws";
 import type { OpenClawResult } from "./types.js";
+import {
+  loadOrCreateDeviceIdentity,
+  publicKeyBase64Url,
+  buildDeviceAuthPayload,
+  signDevicePayload,
+  loadGatewayToken,
+  loadDeviceToken,
+  storeDeviceToken,
+  clearDeviceToken,
+  type DeviceIdentity,
+} from "./device-identity.js";
 
 type Pending = {
   resolve: (value: unknown) => void;
@@ -62,10 +73,13 @@ export class OpenClawClient extends EventEmitter {
   private pending = new Map<string, Pending>();
   private connectPromise: Promise<void> | null = null;
   private connected = false;
+  private connectReject: ((err: Error) => void) | null = null;
+  private deviceIdentity: DeviceIdentity;
 
   constructor(opts: OpenClawClientOptions) {
     super();
     this.opts = opts;
+    this.deviceIdentity = loadOrCreateDeviceIdentity();
   }
 
   private flushPending(err: Error) {
@@ -91,7 +105,11 @@ export class OpenClawClient extends EventEmitter {
             ? (parsed.payload as Record<string, unknown>)
             : {};
         const nonce = typeof payload.nonce === "string" ? payload.nonce : undefined;
-        void this.sendConnect(nonce);
+        void this.sendConnect(nonce).catch((error: unknown) => {
+          if (this.connectReject) {
+            this.connectReject(error instanceof Error ? error : new Error(asMessage(error)));
+          }
+        });
       }
       return;
     }
@@ -118,36 +136,122 @@ export class OpenClawClient extends EventEmitter {
     pending.resolve(parsed.payload);
   }
 
-  private async sendConnect(nonce?: string) {
+  private resolveSharedToken(): string {
+    return this.opts.token || loadGatewayToken() || "";
+  }
+
+  private async sendConnect(nonce?: string, retrying = false): Promise<void> {
+    // Send directly on the WebSocket — do NOT call request() here because
+    // request() → connect() → awaits connectPromise, creating a deadlock.
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
+    const role = "operator";
+    const scopes = ["operator.read", "operator.write"];
+    const signedAtMs = Date.now();
+
+    // Token priority: stored device token → opts.token → auto-detected gateway token
+    const storedToken = !retrying
+      ? loadDeviceToken(this.deviceIdentity.deviceId, role)
+      : null;
+    const sharedToken = this.resolveSharedToken();
+    const authToken = storedToken || sharedToken;
+    const canFallbackToShared = Boolean(storedToken && sharedToken);
+
+    const payload = buildDeviceAuthPayload({
+      deviceId: this.deviceIdentity.deviceId,
+      clientId: "gateway-client",
+      clientMode: "backend",
+      role,
+      scopes,
+      signedAtMs,
+      token: authToken,
+      nonce,
+    });
+    const signature = signDevicePayload(this.deviceIdentity.privateKeyPem, payload);
+
     const params: Record<string, unknown> = {
       minProtocol: 3,
       maxProtocol: 3,
       client: {
-        id: this.opts.clientName || "fluxhive-runner",
+        id: "gateway-client",
         version: this.opts.clientVersion || "0.1.0",
         platform: process.platform,
         mode: "backend",
         instanceId: this.opts.instanceId || randomUUID(),
       },
-      role: "operator",
-      scopes: ["operator.read", "operator.write"],
+      role,
+      scopes,
       caps: [],
       auth: {
-        ...(this.opts.token ? { token: this.opts.token } : {}),
+        ...(authToken ? { token: authToken } : {}),
         ...(this.opts.password ? { password: this.opts.password } : {}),
       },
+      device: {
+        id: this.deviceIdentity.deviceId,
+        publicKey: publicKeyBase64Url(this.deviceIdentity.publicKeyPem),
+        signature,
+        signedAt: signedAtMs,
+        ...(nonce ? { nonce } : {}),
+      },
     };
-    if (nonce) {
-      params.device = {
-        // Keep nonce visible for servers that enforce challenge presence.
-        // We intentionally do not manage device-key signatures in this bridge.
-        nonce,
-      };
+    const id = randomUUID();
+    const responsePromise = new Promise<unknown>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error("OpenClaw connect timeout"));
+      }, 15_000);
+      this.pending.set(id, {
+        resolve,
+        reject,
+        expectFinal: false,
+        timeout,
+      });
+    });
+    this.ws.send(
+      JSON.stringify({ type: "req", id, method: "connect", params }),
+    );
+
+    let response: unknown;
+    try {
+      response = await responsePromise;
+    } catch (err) {
+      // On device token mismatch, clear stored token and retry with shared token
+      if (
+        !retrying &&
+        canFallbackToShared &&
+        err instanceof Error &&
+        err.message.includes("device token mismatch")
+      ) {
+        clearDeviceToken(this.deviceIdentity.deviceId, role);
+        return this.sendConnect(nonce, true);
+      }
+      throw err;
     }
-    await this.request("connect", params, { expectFinal: false, timeoutMs: 15_000 });
+
+    // Capture device token from connect response for future connections
+    const responseObj =
+      response && typeof response === "object"
+        ? (response as Record<string, unknown>)
+        : {};
+    const authInfo =
+      responseObj.auth && typeof responseObj.auth === "object"
+        ? (responseObj.auth as Record<string, unknown>)
+        : null;
+    if (authInfo?.deviceToken && typeof authInfo.deviceToken === "string") {
+      const tokenScopes = Array.isArray(authInfo.scopes)
+        ? (authInfo.scopes as string[])
+        : scopes;
+      const tokenRole =
+        typeof authInfo.role === "string" ? authInfo.role : role;
+      storeDeviceToken(
+        this.deviceIdentity.deviceId,
+        tokenRole,
+        authInfo.deviceToken,
+        tokenScopes,
+      );
+    }
+
     this.connected = true;
   }
 
@@ -158,7 +262,7 @@ export class OpenClawClient extends EventEmitter {
     if (this.connectPromise) {
       return await this.connectPromise;
     }
-    this.connectPromise = new Promise<void>((resolve, reject) => {
+    const raw = new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(this.opts.gatewayUrl, {
         handshakeTimeout: 10_000,
         maxPayload: 25 * 1024 * 1024,
@@ -168,53 +272,55 @@ export class OpenClawClient extends EventEmitter {
       let connectFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
       const cleanup = () => {
+        this.connectReject = null;
         if (connectFallbackTimer) {
           clearTimeout(connectFallbackTimer);
           connectFallbackTimer = null;
         }
       };
 
+      const settle = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      };
+
+      this.connectReject = (err: Error) => settle(err);
+
       ws.on("open", () => {
         connectFallbackTimer = setTimeout(() => {
-          void this.sendConnect(undefined).catch((error) => {
-            if (!settled) {
-              settled = true;
-              cleanup();
-              reject(error instanceof Error ? error : new Error(asMessage(error)));
-            }
+          void this.sendConnect(undefined).catch((error: unknown) => {
+            settle(error instanceof Error ? error : new Error(asMessage(error)));
           });
         }, 750);
       });
       ws.on("message", (data) => {
         this.handleMessage(String(data));
         if (this.connected && !settled) {
-          settled = true;
-          cleanup();
-          resolve();
+          settle();
         }
       });
       ws.on("close", (code, reason) => {
         this.connected = false;
         this.ws = null;
         this.flushPending(new Error(`OpenClaw gateway closed (${code}): ${String(reason)}`));
-        if (!settled) {
-          settled = true;
-          cleanup();
-          reject(new Error(`OpenClaw gateway closed during connect (${code})`));
-        }
+        settle(new Error(`OpenClaw gateway closed during connect (${code})`));
       });
       ws.on("error", (error) => {
-        if (!settled) {
-          settled = true;
-          cleanup();
-          reject(error instanceof Error ? error : new Error(asMessage(error)));
-        }
+        settle(error instanceof Error ? error : new Error(asMessage(error)));
       });
     });
+    // Prevent unhandled rejection if nobody awaits before close fires.
+    raw.catch(() => {});
+    this.connectPromise = raw;
 
-    const pendingConnect = this.connectPromise;
     try {
-      await pendingConnect;
+      await raw;
     } finally {
       this.connectPromise = null;
     }
@@ -260,7 +366,8 @@ export class OpenClawClient extends EventEmitter {
     try {
       await this.request("health", undefined, { timeoutMs: 5000 });
       return true;
-    } catch {
+    } catch (err) {
+      console.error("[openclaw.ping] failed:", err instanceof Error ? err.message : String(err));
       return false;
     }
   }
@@ -361,6 +468,12 @@ export class OpenClawClient extends EventEmitter {
 
   close() {
     this.connected = false;
+    this.connectReject = null;
+    // Suppress async rejection from the connect promise before closing the socket.
+    if (this.connectPromise) {
+      this.connectPromise.catch(() => {});
+      this.connectPromise = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;

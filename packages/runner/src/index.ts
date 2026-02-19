@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import process from "node:process";
+import { handleServiceCommand } from "./service.js";
 import { loadRunnerConfig } from "./config.js";
 import { FluxMcpClient } from "./client.js";
 import { OpenClawClient } from "./openclaw.js";
@@ -39,6 +40,13 @@ function log(level: "info" | "warn" | "error", message: string, fields?: Record<
 }
 
 async function main() {
+  // Handle --service subcommand before loading config
+  const serviceIdx = process.argv.indexOf("--service");
+  if (serviceIdx !== -1) {
+    const action = process.argv[serviceIdx + 1] || "";
+    handleServiceCommand(action);
+  }
+
   const config = await loadRunnerConfig();
   log("info", "runner.start", {
     fluxHost: config.fluxHost,
@@ -74,6 +82,15 @@ async function main() {
     pushMode: handshake.config?.push?.mode || "unknown",
   });
 
+  try {
+    await fluxClient.hello();
+    log("info", "flux.hello.ok");
+  } catch (err) {
+    log("warn", "flux.hello.skipped", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const allowDirectCli =
     (process.env.FLUX_ALLOW_DIRECT_CLI?.trim() || "") === "1" ||
     (process.env.FLUX_ALLOW_DIRECT_CLI?.trim() || "").toLowerCase() === "true";
@@ -104,7 +121,7 @@ async function main() {
         reason: "gateway_ping_failed",
         gatewayUrl: openclawGatewayUrl,
       });
-      openclawClient.close();
+      try { openclawClient.close(); } catch { /* ignore */ }
       openclawClient = null;
     } else {
       executionBackends.push(

@@ -134,6 +134,10 @@ export class FluxMcpClient {
     return await this.request<McpHandshakeResponse>("POST", "/handshake", { body: args });
   }
 
+  async hello(): Promise<void> {
+    await this.request<JsonRecord>("POST", "/hello", { body: {} });
+  }
+
   async listTasks(opts: ListTaskOptions = {}): Promise<McpTaskListResponse> {
     const query = new URLSearchParams();
     if (opts.status) query.set("status", opts.status);
