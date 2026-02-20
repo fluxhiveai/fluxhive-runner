@@ -45,14 +45,16 @@ function detectPlatform(): ServicePlatform {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-/** Resolves the path to the bundled fluxhive CLI relative to this source file. */
+/** Resolves the path to the bundled fluxhive CLI relative to this source file.
+ *  Works both from the bundle (dist/fluxhive.mjs) and from tsc output (dist/runner/service.js). */
 function getRunnerEntrypoint(): string {
-  return resolve(
-    dirname(new URL(import.meta.url).pathname),
-    "..",
-    "dist",
-    "fluxhive.mjs",
-  );
+  const thisFile = dirname(new URL(import.meta.url).pathname);
+  // From bundle: thisFile = .../dist, so go up once to package root
+  // From tsc:    thisFile = .../dist/runner, so go up twice to package root
+  const packageRoot = thisFile.endsWith("/runner")
+    ? resolve(thisFile, "..", "..")
+    : resolve(thisFile, "..");
+  return resolve(packageRoot, "dist", "fluxhive.mjs");
 }
 
 function getNodePath(): string {
