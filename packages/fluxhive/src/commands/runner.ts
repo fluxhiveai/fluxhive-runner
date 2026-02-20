@@ -65,9 +65,9 @@ export function registerRunnerCommands(program: Command): void {
     .command("uninstall")
     .description("Uninstall the runner service")
     .option("--clean", "Also remove ~/.flux/ directory (config, tokens, logs)")
-    .action(async () => {
+    .action(async (opts: { clean?: boolean }) => {
       try {
-        handleServiceCommand("uninstall");
+        handleServiceCommand("uninstall", { clean: opts.clean });
       } catch (err) {
         if (err instanceof Error && err.message.startsWith("process.exit(")) return;
         out.error(err instanceof Error ? err.message : String(err));

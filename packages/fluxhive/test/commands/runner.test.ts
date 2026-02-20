@@ -24,7 +24,7 @@ function makeProgram() {
 describe("runner commands", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  for (const action of ["install", "status", "stop", "restart", "uninstall"] as const) {
+  for (const action of ["install", "status", "stop", "restart"] as const) {
     it(`calls handleServiceCommand("${action}")`, async () => {
       mockHandleServiceCommand.mockImplementation(() => {
         throw Object.assign(new Error(`process.exit(0)`), { code: 0 });
@@ -37,6 +37,30 @@ describe("runner commands", () => {
       expect(mockHandleServiceCommand).toHaveBeenCalledWith(action);
     });
   }
+
+  it(`calls handleServiceCommand("uninstall") with clean option`, async () => {
+    mockHandleServiceCommand.mockImplementation(() => {
+      throw Object.assign(new Error(`process.exit(0)`), { code: 0 });
+    });
+    try {
+      await makeProgram().parseAsync(["node", "fluxhive", "runner", "uninstall", "--clean"]);
+    } catch {
+      // expected
+    }
+    expect(mockHandleServiceCommand).toHaveBeenCalledWith("uninstall", { clean: true });
+  });
+
+  it(`calls handleServiceCommand("uninstall") without clean`, async () => {
+    mockHandleServiceCommand.mockImplementation(() => {
+      throw Object.assign(new Error(`process.exit(0)`), { code: 0 });
+    });
+    try {
+      await makeProgram().parseAsync(["node", "fluxhive", "runner", "uninstall"]);
+    } catch {
+      // expected
+    }
+    expect(mockHandleServiceCommand).toHaveBeenCalledWith("uninstall", { clean: undefined });
+  });
 
   it("surfaces unexpected errors via out.error", async () => {
     mockHandleServiceCommand.mockImplementation(() => {

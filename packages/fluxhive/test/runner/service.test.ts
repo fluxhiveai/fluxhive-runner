@@ -184,6 +184,35 @@ describe("handleServiceCommand", () => {
       expect((err as ProcessExitError).code).toBe(0);
     }
   });
+
+  it("uninstall --clean removes ~/.flux directory", () => {
+    // Create a fake .flux dir
+    const fluxDir = path.join(tempDir, ".flux");
+    fs.mkdirSync(path.join(fluxDir, "logs"), { recursive: true });
+    fs.writeFileSync(path.join(fluxDir, "config.json"), "{}");
+
+    try {
+      handleServiceCommand("uninstall", { clean: true });
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(0);
+    }
+
+    expect(fs.existsSync(fluxDir)).toBe(false);
+  });
+
+  it("uninstall without --clean keeps ~/.flux directory", () => {
+    const fluxDir = path.join(tempDir, ".flux");
+    fs.mkdirSync(path.join(fluxDir, "logs"), { recursive: true });
+    fs.writeFileSync(path.join(fluxDir, "config.json"), "{}");
+
+    try {
+      handleServiceCommand("uninstall");
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(0);
+    }
+
+    expect(fs.existsSync(fluxDir)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

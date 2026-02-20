@@ -16,7 +16,7 @@
  * Logs are written to ~/.flux/logs/runner.log and ~/.flux/logs/runner.err.log.
  */
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, rmSync } from "node:fs";
 import { join, resolve, dirname, posix, delimiter } from "node:path";
 import { homedir, platform } from "node:os";
 import process from "node:process";
@@ -571,7 +571,7 @@ function printRecentLogs(): void {
  * Detects the platform and delegates to the appropriate launchd/systemd handler.
  * Always exits the process after completion.
  */
-export function handleServiceCommand(action: string): never {
+export function handleServiceCommand(action: string, opts?: { clean?: boolean }): never {
   const plat = detectPlatform();
 
   if (action === "install") {
@@ -592,6 +592,13 @@ export function handleServiceCommand(action: string): never {
   } else if (action === "uninstall") {
     if (plat === "launchd") launchdUninstall();
     else systemdUninstall();
+    if (opts?.clean) {
+      const fluxDir = join(homedir(), ".flux");
+      if (existsSync(fluxDir)) {
+        rmSync(fluxDir, { recursive: true, force: true });
+        console.log(`Removed ${fluxDir} (config, tokens, logs)`);
+      }
+    }
   } else if (action === "status") {
     if (plat === "launchd") launchdStatus();
     else systemdStatus();
