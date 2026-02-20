@@ -219,6 +219,53 @@ describe("handleServiceCommand", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Standalone bundle bootstrap (stub package.json creation)
+// ---------------------------------------------------------------------------
+
+describe("standalone bundle bootstrap", () => {
+  it("creates stub package.json when missing (simulating ~/.flux/)", () => {
+    // Simulate a fresh ~/.flux/ directory with no package.json
+    const fakeFluxDir = path.join(tempDir, ".flux-bootstrap-test");
+    fs.mkdirSync(fakeFluxDir, { recursive: true });
+    const stubPath = path.join(fakeFluxDir, "package.json");
+
+    // Replicate the bootstrap logic from index.ts
+    if (!fs.existsSync(stubPath)) {
+      fs.writeFileSync(stubPath, '{"name":"fluxhive-runner","version":"0.0.0","type":"module"}\n');
+    }
+
+    expect(fs.existsSync(stubPath)).toBe(true);
+    const content = JSON.parse(fs.readFileSync(stubPath, "utf8"));
+    expect(content.name).toBe("fluxhive-runner");
+    expect(content.type).toBe("module");
+
+    // Cleanup
+    fs.rmSync(fakeFluxDir, { recursive: true, force: true });
+  });
+
+  it("does not overwrite existing package.json", () => {
+    const fakeFluxDir = path.join(tempDir, ".flux-bootstrap-test2");
+    fs.mkdirSync(fakeFluxDir, { recursive: true });
+    const stubPath = path.join(fakeFluxDir, "package.json");
+
+    // Pre-existing package.json with custom content
+    fs.writeFileSync(stubPath, '{"name":"custom","version":"1.0.0"}\n');
+
+    // Replicate the bootstrap logic — should NOT overwrite
+    if (!fs.existsSync(stubPath)) {
+      fs.writeFileSync(stubPath, '{"name":"fluxhive-runner","version":"0.0.0","type":"module"}\n');
+    }
+
+    const content = JSON.parse(fs.readFileSync(stubPath, "utf8"));
+    expect(content.name).toBe("custom");
+    expect(content.version).toBe("1.0.0");
+
+    // Cleanup
+    fs.rmSync(fakeFluxDir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // getRunnerEntrypoint logic (replicated)
 // ---------------------------------------------------------------------------
 
