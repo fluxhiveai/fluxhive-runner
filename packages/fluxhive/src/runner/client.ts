@@ -114,6 +114,11 @@ export class FluxMcpClient {
     await this.request<JsonRecord>("POST", "/hello", { body: {} });
   }
 
+  /** Notifies the server that this agent is going offline (best-effort). */
+  async disconnect(): Promise<void> {
+    await this.request<JsonRecord>("POST", "/disconnect", { body: {} });
+  }
+
   /** Lists tasks matching the given filters (status, backend, stream, etc.). */
   async listTasks(opts: ListTaskOptions = {}): Promise<McpTaskListResponse> {
     const query = new URLSearchParams();

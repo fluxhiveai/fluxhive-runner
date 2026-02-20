@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, rmSync 
 import { join, resolve, dirname, basename, posix, delimiter } from "node:path";
 import { homedir, platform } from "node:os";
 import process from "node:process";
+import { FluxMcpClient } from "./client.js";
 
 const LABEL = "ai.fluxhive.runner";
 const SYSTEMD_SERVICE_NAME = "fluxhive-runner";
@@ -346,6 +347,21 @@ function launchdStop(): void {
   console.log(`Stopped ${LABEL}`);
 }
 
+/** Best-effort disconnect: notifies the server before uninstall.
+ *  Reads FLUX_TOKEN/FLUX_HOST from env or from the installed plist/unit file. */
+async function notifyDisconnect(): Promise<void> {
+  const token = process.env.FLUX_TOKEN;
+  const host = process.env.FLUX_HOST;
+  if (!token || !host) return;
+  try {
+    const client = new FluxMcpClient({ baseUrl: `${host}/mcp/v1`, token });
+    await client.disconnect();
+    console.log("Notified server of disconnect.");
+  } catch {
+    // Best-effort — proceed with uninstall even if offline
+  }
+}
+
 function launchdUninstall(): void {
   const domain = resolveGuiDomain();
   execLaunchctl(["bootout", `${domain}/${LABEL}`]);
@@ -604,15 +620,23 @@ export function handleServiceCommand(action: string, opts?: { clean?: boolean })
     if (plat === "launchd") launchdStop();
     else systemdStop();
   } else if (action === "uninstall") {
-    if (plat === "launchd") launchdUninstall();
-    else systemdUninstall();
-    if (opts?.clean) {
-      const fluxDir = join(homedir(), ".flux");
-      if (existsSync(fluxDir)) {
-        rmSync(fluxDir, { recursive: true, force: true });
-        console.log(`Removed ${fluxDir} (config, tokens, logs)`);
+    // Notify server of disconnect before removing the service (best-effort, then exit)
+    void notifyDisconnect().finally(() => {
+      if (plat === "launchd") launchdUninstall();
+      else systemdUninstall();
+      if (opts?.clean) {
+        const fluxDir = join(homedir(), ".flux");
+        if (existsSync(fluxDir)) {
+          rmSync(fluxDir, { recursive: true, force: true });
+          console.log(`Removed ${fluxDir} (config, tokens, logs)`);
+        }
       }
-    }
+      process.exit(0);
+    });
+    // Keep the event loop alive while the async disconnect runs
+    setTimeout(() => process.exit(1), 15_000);
+    // TypeScript needs a `never` return — the above paths always exit
+    return undefined as never;
   } else if (action === "status") {
     if (plat === "launchd") launchdStatus();
     else systemdStatus();
