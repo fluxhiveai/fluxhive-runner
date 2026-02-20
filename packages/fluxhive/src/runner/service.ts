@@ -54,7 +54,15 @@ function getRunnerEntrypoint(): string {
   const packageRoot = thisFile.endsWith("/runner")
     ? resolve(thisFile, "..", "..")
     : resolve(thisFile, "..");
-  return resolve(packageRoot, "dist", "fluxhive.mjs");
+  const entrypoint = resolve(packageRoot, "dist", "fluxhive.mjs");
+  if (!existsSync(entrypoint)) {
+    console.warn(
+      `Warning: bundled entrypoint not found at ${entrypoint}\n` +
+      `  Run 'pnpm bundle' in the fluxhive package to create it.\n` +
+      `  ('pnpm build' only runs tsc — the service requires the bundle.)`,
+    );
+  }
+  return entrypoint;
 }
 
 function getNodePath(): string {
@@ -341,6 +349,7 @@ function launchdUninstall(): void {
   if (existsSync(PLIST_PATH)) unlinkSync(PLIST_PATH);
   console.log(`Uninstalled ${LABEL}`);
   console.log(`  Removed: ${PLIST_PATH}`);
+  console.log(`  Note: config and tokens remain at ~/.flux — remove manually or re-run with --clean`);
 }
 
 function launchdStatus(): void {
@@ -515,6 +524,7 @@ function systemdUninstall(): void {
   execSystemctl(["--user", "daemon-reload"]);
   console.log(`Uninstalled ${SYSTEMD_UNIT}`);
   console.log(`  Removed: ${systemdUnitPath()}`);
+  console.log(`  Note: config and tokens remain at ~/.flux — remove manually or re-run with --clean`);
 }
 
 function systemdStatus(): void {
