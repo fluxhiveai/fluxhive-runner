@@ -146,13 +146,11 @@ describe("handleServiceCommand", () => {
     }
   });
 
-  it("restart exits 1 when plist does not exist", () => {
-    // Uninstall first so plist is gone
-    try {
-      handleServiceCommand("uninstall");
-    } catch {
-      // exit 0
-    }
+  it("restart exits 1 when plist does not exist", async () => {
+    // Uninstall is async (notifyDisconnect), so wait for it to complete
+    const plistPath = path.join(tempDir, "Library", "LaunchAgents", "ai.fluxhive.runner.plist");
+    if (fs.existsSync(plistPath)) fs.unlinkSync(plistPath);
+
     try {
       handleServiceCommand("restart");
     } catch (err) {
@@ -177,40 +175,45 @@ describe("handleServiceCommand", () => {
     }
   });
 
-  it("uninstall exits 0", () => {
-    try {
-      handleServiceCommand("uninstall");
-    } catch (err) {
-      expect((err as ProcessExitError).code).toBe(0);
-    }
+  it("uninstall exits 0", async () => {
+    // Uninstall is async (notifyDisconnect → .finally). Use a no-op exit mock
+    // so the .finally callback doesn't throw into an unhandled rejection.
+    const exitCalls: number[] = [];
+    process.exit = ((code: number) => { exitCalls.push(code ?? 0); }) as never;
+
+    handleServiceCommand("uninstall");
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(exitCalls).toContain(0);
   });
 
-  it("uninstall --clean removes ~/.flux directory", () => {
-    // Create a fake .flux dir
+  it("uninstall --clean removes ~/.flux directory", async () => {
     const fluxDir = path.join(tempDir, ".flux");
     fs.mkdirSync(path.join(fluxDir, "logs"), { recursive: true });
     fs.writeFileSync(path.join(fluxDir, "config.json"), "{}");
 
-    try {
-      handleServiceCommand("uninstall", { clean: true });
-    } catch (err) {
-      expect((err as ProcessExitError).code).toBe(0);
-    }
+    const exitCalls: number[] = [];
+    process.exit = ((code: number) => { exitCalls.push(code ?? 0); }) as never;
 
+    handleServiceCommand("uninstall", { clean: true });
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(exitCalls).toContain(0);
     expect(fs.existsSync(fluxDir)).toBe(false);
   });
 
-  it("uninstall without --clean keeps ~/.flux directory", () => {
+  it("uninstall without --clean keeps ~/.flux directory", async () => {
     const fluxDir = path.join(tempDir, ".flux");
     fs.mkdirSync(path.join(fluxDir, "logs"), { recursive: true });
     fs.writeFileSync(path.join(fluxDir, "config.json"), "{}");
 
-    try {
-      handleServiceCommand("uninstall");
-    } catch (err) {
-      expect((err as ProcessExitError).code).toBe(0);
-    }
+    const exitCalls: number[] = [];
+    process.exit = ((code: number) => { exitCalls.push(code ?? 0); }) as never;
 
+    handleServiceCommand("uninstall");
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(exitCalls).toContain(0);
     expect(fs.existsSync(fluxDir)).toBe(true);
   });
 });

@@ -78,6 +78,13 @@ function ensureFluxDir(): void {
   if (!existsSync(LOG_DIR)) {
     mkdirSync(LOG_DIR, { recursive: true });
   }
+  // pi-agent-core reads package.json from the bundle's directory at import time.
+  // When running standalone from ~/.flux/, we need a stub so it doesn't crash.
+  const fluxDir = join(homedir(), ".flux");
+  const stubPkg = join(fluxDir, "package.json");
+  if (!existsSync(stubPkg)) {
+    writeFileSync(stubPkg, JSON.stringify({ name: "fluxhive-runner", version: "0.0.0", type: "module" }) + "\n");
+  }
 }
 
 function resolveGuiDomain(): string {
