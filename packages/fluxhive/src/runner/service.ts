@@ -375,10 +375,17 @@ function launchdStop(): void {
 }
 
 /** Best-effort disconnect: notifies the server before uninstall.
- *  Reads FLUX_TOKEN/FLUX_HOST from env or from the installed plist/unit file. */
+ *  Reads FLUX_TOKEN/FLUX_HOST from env vars, then falls back to ~/.flux/config.json. */
 async function notifyDisconnect(): Promise<void> {
-  const token = process.env.FLUX_TOKEN;
-  const host = process.env.FLUX_HOST;
+  let token = process.env.FLUX_TOKEN;
+  let host = process.env.FLUX_HOST;
+  if (!token || !host) {
+    const config = readConfigFile();
+    if (config) {
+      if (!token && config.token) token = config.token;
+      if (!host && config.host) host = config.host;
+    }
+  }
   if (!token || !host) return;
   try {
     const client = new FluxMcpClient({ baseUrl: `${host}/mcp/v1`, token });
