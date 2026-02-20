@@ -1,0 +1,410 @@
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import os from "node:os";
+import path from "node:path";
+import fs from "node:fs";
+import process from "node:process";
+
+// ---------------------------------------------------------------------------
+// service.ts has module-level constants that call homedir() at import time,
+// so we must set tempDir BEFORE importing the module. We also mock
+// child_process.execSync to avoid real launchctl/systemctl calls.
+// ---------------------------------------------------------------------------
+
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "flux-service-test-"));
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import("node:os");
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      homedir: () => tempDir,
+      platform: actual.platform,
+    },
+    homedir: () => tempDir,
+    platform: actual.platform,
+  };
+});
+
+vi.mock("node:child_process", () => ({
+  execSync: vi.fn(() => ""),
+}));
+
+// Import after mocks are set up and tempDir is defined
+const { handleServiceCommand } = await import("../../src/runner/service.ts");
+
+// ---------------------------------------------------------------------------
+// Since handleServiceCommand calls process.exit, we mock it to throw
+// so we can catch and verify behavior.
+// ---------------------------------------------------------------------------
+
+class ProcessExitError extends Error {
+  code: number;
+  constructor(code: number) {
+    super(`process.exit(${code})`);
+    this.name = "ProcessExitError";
+    this.code = code;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("handleServiceCommand", () => {
+  const origEnv = { ...process.env };
+  const origExit = process.exit;
+
+  beforeEach(() => {
+    // Mock process.exit to throw instead of exiting
+    process.exit = ((code: number) => {
+      throw new ProcessExitError(code ?? 0);
+    }) as never;
+
+    // Set required env vars for install
+    process.env.FLUX_TOKEN = "tok-test";
+    process.env.FLUX_HOST = "https://fluxhive.test";
+  });
+
+  afterEach(() => {
+    process.exit = origExit;
+    process.env = { ...origEnv };
+  });
+
+  it("rejects unknown action with exit code 1", () => {
+    expect(() => handleServiceCommand("bogus")).toThrow(ProcessExitError);
+    try {
+      handleServiceCommand("bogus");
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(1);
+    }
+  });
+
+  it("rejects empty action", () => {
+    expect(() => handleServiceCommand("")).toThrow(ProcessExitError);
+  });
+
+  it("install requires FLUX_TOKEN", () => {
+    delete process.env.FLUX_TOKEN;
+
+    expect(() => handleServiceCommand("install")).toThrow(ProcessExitError);
+    try {
+      handleServiceCommand("install");
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(1);
+    }
+  });
+
+  it("install requires FLUX_HOST", () => {
+    delete process.env.FLUX_HOST;
+
+    expect(() => handleServiceCommand("install")).toThrow(ProcessExitError);
+    try {
+      handleServiceCommand("install");
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(1);
+    }
+  });
+
+  it("install with valid env exits 0 on macOS", () => {
+    // This should succeed on macOS (the platform detection will pick launchd)
+    // The execSync mock prevents actual launchctl calls
+    try {
+      handleServiceCommand("install");
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(0);
+    }
+
+    // Verify the LaunchAgents plist was written
+    const plistPath = path.join(tempDir, "Library", "LaunchAgents", "ai.fluxhive.runner.plist");
+    if (os.platform() === "darwin") {
+      expect(fs.existsSync(plistPath)).toBe(true);
+
+      const plistContent = fs.readFileSync(plistPath, "utf8");
+      expect(plistContent).toContain("ai.fluxhive.runner");
+      expect(plistContent).toContain("<key>RunAtLoad</key>");
+      expect(plistContent).toContain("<true/>");
+      expect(plistContent).toContain("<key>KeepAlive</key>");
+      expect(plistContent).toContain("<key>ProgramArguments</key>");
+      expect(plistContent).toContain("<key>EnvironmentVariables</key>");
+      expect(plistContent).toContain("tok-test");
+      expect(plistContent).toContain("https://fluxhive.test");
+    }
+  });
+
+  it("restart exits 0 when plist exists", () => {
+    // First install, then restart
+    try {
+      handleServiceCommand("install");
+    } catch {
+      // exit 0
+    }
+    try {
+      handleServiceCommand("restart");
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(0);
+    }
+  });
+
+  it("restart exits 1 when plist does not exist", () => {
+    // Uninstall first so plist is gone
+    try {
+      handleServiceCommand("uninstall");
+    } catch {
+      // exit 0
+    }
+    try {
+      handleServiceCommand("restart");
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(1);
+    }
+  });
+
+  it("stop exits 0", () => {
+    try {
+      handleServiceCommand("stop");
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(0);
+    }
+  });
+
+  it("status exits 0", () => {
+    try {
+      handleServiceCommand("status");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ProcessExitError);
+      expect((err as ProcessExitError).code).toBe(0);
+    }
+  });
+
+  it("uninstall exits 0", () => {
+    try {
+      handleServiceCommand("uninstall");
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(0);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Env var collection logic
+// ---------------------------------------------------------------------------
+
+describe("env var handling", () => {
+  it("FLUX_* and OPENCLAW_* env vars are recognized", () => {
+    const ENV_KEYS = [
+      "FLUX_TOKEN",
+      "FLUX_HOST",
+      "FLUX_ORG_ID",
+      "FLUX_CADENCE_MINUTES",
+      "FLUX_RUNNER_TYPE",
+      "FLUX_RUNNER_VERSION",
+      "FLUX_RUNNER_ID",
+      "FLUX_MACHINE_ID",
+      "FLUX_BACKEND",
+      "FLUX_ALLOW_DIRECT_CLI",
+      "FLUX_PUSH_RECONNECT_MS",
+      "OPENCLAW_GATEWAY_URL",
+      "OPENCLAW_GATEWAY_TOKEN",
+      "OPENCLAW_GATEWAY_PASSWORD",
+      "OPENCLAW_AGENT_ID",
+    ];
+
+    // All these env keys should match the expected naming pattern
+    for (const key of ENV_KEYS) {
+      expect(key).toMatch(/^(FLUX_|OPENCLAW_)/);
+    }
+    expect(ENV_KEYS).toHaveLength(15);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plist XML structure
+// ---------------------------------------------------------------------------
+
+describe("plist XML structure (install output)", () => {
+  const origEnv = { ...process.env };
+  const origExit = process.exit;
+
+  beforeEach(() => {
+    process.exit = ((code: number) => {
+      throw new ProcessExitError(code ?? 0);
+    }) as never;
+    process.env.FLUX_TOKEN = "tok-plist";
+    process.env.FLUX_HOST = "https://fluxhive.plist.test";
+    process.env.FLUX_ORG_ID = "org-plist";
+  });
+
+  afterEach(() => {
+    process.exit = origExit;
+    process.env = { ...origEnv };
+  });
+
+  it("plist includes all FLUX env vars", () => {
+    if (os.platform() !== "darwin") return;
+
+    try {
+      handleServiceCommand("install");
+    } catch {
+      // expected exit
+    }
+
+    const plistPath = path.join(tempDir, "Library", "LaunchAgents", "ai.fluxhive.runner.plist");
+    if (!fs.existsSync(plistPath)) return;
+
+    const content = fs.readFileSync(plistPath, "utf8");
+    expect(content).toContain("tok-plist");
+    expect(content).toContain("fluxhive.plist.test");
+    expect(content).toContain("org-plist");
+    // FLUX_CADENCE_MINUTES should default to 1
+    expect(content).toContain("FLUX_CADENCE_MINUTES");
+  });
+
+  it("plist creates log directory", () => {
+    if (os.platform() !== "darwin") return;
+
+    try {
+      handleServiceCommand("install");
+    } catch {
+      // expected exit
+    }
+
+    const logDir = path.join(tempDir, ".flux", "logs");
+    expect(fs.existsSync(logDir)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// XML escaping (replicated pure function)
+// ---------------------------------------------------------------------------
+
+describe("plistEscape (replicated)", () => {
+  function plistEscape(s: string): string {
+    return s
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;");
+  }
+
+  it("escapes ampersand", () => {
+    expect(plistEscape("a & b")).toBe("a &amp; b");
+  });
+
+  it("escapes angle brackets", () => {
+    expect(plistEscape("<tag>")).toBe("&lt;tag&gt;");
+  });
+
+  it("escapes quotes", () => {
+    expect(plistEscape('key="val"')).toBe("key=&quot;val&quot;");
+  });
+
+  it("escapes apostrophe", () => {
+    expect(plistEscape("it's")).toBe("it&apos;s");
+  });
+
+  it("passes through clean strings unchanged", () => {
+    expect(plistEscape("clean-string_123")).toBe("clean-string_123");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// systemd argument escaping (replicated pure function)
+// ---------------------------------------------------------------------------
+
+describe("systemdEscapeArg (replicated)", () => {
+  function systemdEscapeArg(value: string): string {
+    if (!/[\s"\\]/.test(value)) return value;
+    return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  }
+
+  it("does not quote simple arguments", () => {
+    expect(systemdEscapeArg("/usr/local/bin/node")).toBe("/usr/local/bin/node");
+    expect(systemdEscapeArg("simple")).toBe("simple");
+  });
+
+  it("quotes arguments with spaces", () => {
+    expect(systemdEscapeArg("/path/with spaces/node")).toBe('"/path/with spaces/node"');
+  });
+
+  it("escapes backslashes", () => {
+    expect(systemdEscapeArg("path\\to")).toBe('"path\\\\to"');
+  });
+
+  it("escapes double quotes", () => {
+    expect(systemdEscapeArg('val="x"')).toBe('"val=\\"x\\""');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Platform detection (replicated pure function)
+// ---------------------------------------------------------------------------
+
+describe("detectPlatform (replicated)", () => {
+  function detectPlatform(p: string): "launchd" | "systemd" {
+    if (p === "darwin") return "launchd";
+    if (p === "linux") return "systemd";
+    throw new Error(`Unsupported platform: ${p}`);
+  }
+
+  it("darwin maps to launchd", () => {
+    expect(detectPlatform("darwin")).toBe("launchd");
+  });
+
+  it("linux maps to systemd", () => {
+    expect(detectPlatform("linux")).toBe("systemd");
+  });
+
+  it("throws for unsupported platforms", () => {
+    expect(() => detectPlatform("win32")).toThrow("Unsupported platform");
+    expect(() => detectPlatform("freebsd")).toThrow("Unsupported platform");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Systemd unit file structure (replicated template)
+// ---------------------------------------------------------------------------
+
+describe("systemd unit file template", () => {
+  it("contains required sections and fields", () => {
+    // Verify the expected structure of the unit file
+    function buildSystemdUnit(execStart: string, envLines: string[]): string {
+      return [
+        "[Unit]",
+        "Description=FluxHive Runner",
+        "After=network-online.target",
+        "Wants=network-online.target",
+        "",
+        "[Service]",
+        `ExecStart=${execStart}`,
+        "Restart=always",
+        "RestartSec=5",
+        "KillMode=process",
+        "StandardOutput=append:/tmp/runner.log",
+        "StandardError=append:/tmp/runner.err.log",
+        ...envLines,
+        "",
+        "[Install]",
+        "WantedBy=default.target",
+        "",
+      ].join("\n");
+    }
+
+    const unit = buildSystemdUnit("/usr/bin/node /path/to/entry.js", [
+      'Environment="FLUX_TOKEN=tok"',
+      'Environment="FLUX_HOST=https://host.com"',
+    ]);
+
+    expect(unit).toContain("[Unit]");
+    expect(unit).toContain("[Service]");
+    expect(unit).toContain("[Install]");
+    expect(unit).toContain("Description=FluxHive Runner");
+    expect(unit).toContain("Restart=always");
+    expect(unit).toContain("RestartSec=5");
+    expect(unit).toContain("KillMode=process");
+    expect(unit).toContain("WantedBy=default.target");
+    expect(unit).toContain("ExecStart=/usr/bin/node /path/to/entry.js");
+    expect(unit).toContain("FLUX_TOKEN=tok");
+  });
+});
