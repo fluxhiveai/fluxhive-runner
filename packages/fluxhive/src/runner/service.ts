@@ -17,7 +17,7 @@
  */
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, rmSync } from "node:fs";
-import { join, resolve, dirname, posix, delimiter } from "node:path";
+import { join, resolve, dirname, basename, posix, delimiter } from "node:path";
 import { homedir, platform } from "node:os";
 import process from "node:process";
 
@@ -45,15 +45,19 @@ function detectPlatform(): ServicePlatform {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-/** Resolves the path to the bundled fluxhive CLI relative to this source file.
- *  Works both from the bundle (dist/fluxhive.mjs) and from tsc output (dist/runner/service.js). */
+/** Resolves the path to the bundled fluxhive CLI.
+ *  - Standalone bundle (e.g. ~/.flux/fluxhive.mjs): returns its own path.
+ *  - Repo bundle (dist/fluxhive.mjs): returns its own path (same file).
+ *  - tsc output (dist/runner/service.js): resolves to <packageRoot>/dist/fluxhive.mjs. */
 function getRunnerEntrypoint(): string {
-  const thisFile = dirname(new URL(import.meta.url).pathname);
-  // From bundle: thisFile = .../dist, so go up once to package root
-  // From tsc:    thisFile = .../dist/runner, so go up twice to package root
-  const packageRoot = thisFile.endsWith("/runner")
-    ? resolve(thisFile, "..", "..")
-    : resolve(thisFile, "..");
+  const thisFile = new URL(import.meta.url).pathname;
+  // If we ARE the bundle (filename is fluxhive.mjs), point to ourselves
+  if (basename(thisFile) === "fluxhive.mjs") return thisFile;
+  // Otherwise fall back to repo-relative resolution (dev/tsc mode)
+  const thisDir = dirname(thisFile);
+  const packageRoot = thisDir.endsWith("/runner")
+    ? resolve(thisDir, "..", "..")
+    : resolve(thisDir, "..");
   const entrypoint = resolve(packageRoot, "dist", "fluxhive.mjs");
   if (!existsSync(entrypoint)) {
     console.warn(
@@ -69,7 +73,7 @@ function getNodePath(): string {
   return process.execPath;
 }
 
-function ensureLogDir(): void {
+function ensureFluxDir(): void {
   if (!existsSync(LOG_DIR)) {
     mkdirSync(LOG_DIR, { recursive: true });
   }
@@ -276,7 +280,7 @@ function execLaunchctl(args: string[]): { code: number; stdout: string; stderr: 
 }
 
 function launchdInstall(envVars: Record<string, string>): void {
-  ensureLogDir();
+  ensureFluxDir();
 
   const domain = resolveGuiDomain();
   const plist = buildPlist(envVars);
@@ -445,7 +449,7 @@ function execSystemctl(args: string[]): { code: number; stdout: string; stderr: 
 }
 
 function systemdInstall(envVars: Record<string, string>): void {
-  ensureLogDir();
+  ensureFluxDir();
   const unitDir = systemdUnitDir();
   if (!existsSync(unitDir)) mkdirSync(unitDir, { recursive: true });
 

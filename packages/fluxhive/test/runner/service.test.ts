@@ -216,6 +216,42 @@ describe("handleServiceCommand", () => {
 });
 
 // ---------------------------------------------------------------------------
+// getRunnerEntrypoint logic (replicated)
+// ---------------------------------------------------------------------------
+
+describe("getRunnerEntrypoint logic", () => {
+  function getRunnerEntrypoint(importMetaUrl: string): string {
+    const thisFile = new URL(importMetaUrl).pathname;
+    if (path.basename(thisFile) === "fluxhive.mjs") return thisFile;
+    const thisDir = path.dirname(thisFile);
+    const packageRoot = thisDir.endsWith("/runner")
+      ? path.resolve(thisDir, "..", "..")
+      : path.resolve(thisDir, "..");
+    return path.resolve(packageRoot, "dist", "fluxhive.mjs");
+  }
+
+  it("returns own path when running as standalone bundle", () => {
+    const result = getRunnerEntrypoint("file:///Users/someone/.flux/fluxhive.mjs");
+    expect(result).toBe("/Users/someone/.flux/fluxhive.mjs");
+  });
+
+  it("returns own path when running from repo dist bundle", () => {
+    const result = getRunnerEntrypoint("file:///home/user/fluxhive-runner/packages/fluxhive/dist/fluxhive.mjs");
+    expect(result).toBe("/home/user/fluxhive-runner/packages/fluxhive/dist/fluxhive.mjs");
+  });
+
+  it("resolves to dist/fluxhive.mjs from tsc output (runner subdir)", () => {
+    const result = getRunnerEntrypoint("file:///home/user/fluxhive-runner/packages/fluxhive/dist/runner/service.js");
+    expect(result).toBe("/home/user/fluxhive-runner/packages/fluxhive/dist/fluxhive.mjs");
+  });
+
+  it("resolves to dist/fluxhive.mjs from non-runner tsc output", () => {
+    const result = getRunnerEntrypoint("file:///home/user/fluxhive-runner/packages/fluxhive/dist/service.js");
+    expect(result).toBe("/home/user/fluxhive-runner/packages/fluxhive/dist/fluxhive.mjs");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Env var collection logic
 // ---------------------------------------------------------------------------
 
