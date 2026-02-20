@@ -1,6 +1,6 @@
 {
   "name": "@fluxhive/cli",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "type": "module",
   "bin": {
     "fluxhive": "./dist/fluxhive.mjs"
