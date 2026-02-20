@@ -106,6 +106,37 @@ describe("handleServiceCommand", () => {
     }
   });
 
+  it("install reads credentials from ~/.flux/config.json when env vars missing", () => {
+    if (os.platform() !== "darwin") return;
+
+    // Remove env vars
+    delete process.env.FLUX_TOKEN;
+    delete process.env.FLUX_HOST;
+
+    // Write a config file in the mocked home directory
+    const fluxDir = path.join(tempDir, ".flux");
+    fs.mkdirSync(fluxDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(fluxDir, "config.json"),
+      JSON.stringify({ host: "https://config-file.test", token: "tok-from-config", orgId: "org-cfg" }),
+    );
+
+    try {
+      handleServiceCommand("install");
+    } catch (err) {
+      expect((err as ProcessExitError).code).toBe(0);
+    }
+
+    // Verify the plist was written with config file values
+    const plistPath = path.join(tempDir, "Library", "LaunchAgents", "ai.fluxhive.runner.plist");
+    if (fs.existsSync(plistPath)) {
+      const content = fs.readFileSync(plistPath, "utf8");
+      expect(content).toContain("tok-from-config");
+      expect(content).toContain("config-file.test");
+      expect(content).toContain("org-cfg");
+    }
+  });
+
   it("install with valid env exits 0 on macOS", () => {
     // This should succeed on macOS (the platform detection will pick launchd)
     // The execSync mock prevents actual launchctl calls

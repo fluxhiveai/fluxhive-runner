@@ -155,12 +155,32 @@ const ENV_KEYS = [
   "OPENCLAW_AGENT_ID",
 ];
 
-/** Collects all FLUX_* and OPENCLAW_* env vars that are currently set. */
+/** Reads ~/.flux/config.json (written by `access redeem`). */
+function readConfigFile(): { host?: string; token?: string; orgId?: string } | null {
+  try {
+    const raw = readFileSync(join(homedir(), ".flux", "config.json"), "utf8");
+    return JSON.parse(raw) as { host?: string; token?: string; orgId?: string };
+  } catch {
+    return null;
+  }
+}
+
+/** Collects all FLUX_* and OPENCLAW_* env vars that are currently set,
+ *  falling back to ~/.flux/config.json for token, host, and orgId. */
 function collectEnvVars(): Record<string, string> {
   const vars: Record<string, string> = {};
   for (const key of ENV_KEYS) {
     const val = process.env[key]?.trim();
     if (val) vars[key] = val;
+  }
+  // Fall back to config file for core credentials (written by `access redeem`)
+  if (!vars.FLUX_TOKEN || !vars.FLUX_HOST) {
+    const config = readConfigFile();
+    if (config) {
+      if (!vars.FLUX_TOKEN && config.token) vars.FLUX_TOKEN = config.token;
+      if (!vars.FLUX_HOST && config.host) vars.FLUX_HOST = config.host;
+      if (!vars.FLUX_ORG_ID && config.orgId) vars.FLUX_ORG_ID = config.orgId;
+    }
   }
   return vars;
 }
@@ -190,13 +210,13 @@ function applyDefaults(envVars: Record<string, string>): void {
 function validateEnvVars(envVars: Record<string, string>): void {
   if (!envVars.FLUX_TOKEN) {
     console.error(
-      "Error: FLUX_TOKEN is required. Set it as an environment variable.",
+      "Error: FLUX_TOKEN is required. Set FLUX_TOKEN env var or run 'fluxhive access redeem' first.",
     );
     process.exit(1);
   }
   if (!envVars.FLUX_HOST) {
     console.error(
-      "Error: FLUX_HOST is required. Set it as an environment variable.",
+      "Error: FLUX_HOST is required. Set FLUX_HOST env var or run 'fluxhive access redeem' first.",
     );
     process.exit(1);
   }
