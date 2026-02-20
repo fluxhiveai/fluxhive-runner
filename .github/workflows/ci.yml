@@ -25,10 +25,5 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Runner Tests
-        run: |
-          pnpm -C packages/runner test
-          pnpm -C packages/runner build
-
-      - name: Runner App Tests
-        run: pnpm -C apps/runner test
+      - name: Tests
+        run: pnpm -C packages/fluxhive test
