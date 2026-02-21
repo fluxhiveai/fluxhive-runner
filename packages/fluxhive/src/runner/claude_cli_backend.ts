@@ -120,10 +120,18 @@ export class ClaudeCliExecutionBackend implements RunnerExecutionBackend {
     ];
 
     const start = Date.now();
+    // Whitelist env vars — explicitly exclude secrets (FLUX_TOKEN, OPENCLAW_*)
+    const allowedEnv: Record<string, string> = {};
+    const envKeys = ["PATH", "HOME", "TMPDIR", "LANG", "TERM", "CLAUDE_BIN"] as const;
+    for (const key of envKeys) {
+      const val = process.env[key];
+      if (val !== undefined) allowedEnv[key] = val;
+    }
+
     const child = spawn(command, args, {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env },
+      env: allowedEnv,
     });
 
     let stdout = "";

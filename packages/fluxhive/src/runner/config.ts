@@ -8,15 +8,20 @@
  *
  * Config loading order:
  *   1. .env / .env.local (if present, for local dev ergonomics)
- *   2. Required env vars: FLUX_TOKEN, FLUX_HOST
- *   3. Optional env vars: FLUX_ORG_ID, FLUX_CADENCE_MINUTES, etc.
- *   4. SKILL.md fetch → frontmatter parse → orgId + MCP base resolution
+ *   2. FLUX_TOKEN, FLUX_HOST from env vars → fallback to ~/.flux/config.json
+ *   3. OPENCLAW_* from env vars → fallback to ~/.openclaw/openclaw.json
+ *   4. Optional env vars: FLUX_ORG_ID, FLUX_CADENCE_MINUTES, etc.
+ *   5. SKILL.md fetch → frontmatter parse → orgId + MCP base resolution
  */
 import process from "node:process";
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import YAML from "yaml";
 import type { RunnerConfig, SkillManifestFrontmatter } from "../types.js";
 import { VERSION } from "../version.js";
+import { readConfigFile } from "../config.js";
 
 /** Reads a required environment variable or throws with a clear message. */
 function requiredEnv(name: string): string {
@@ -130,11 +135,30 @@ export async function fetchSkillManifest(
   return { url, body, frontmatter };
 }
 
+/** Reads OpenClaw config from ~/.openclaw/openclaw.json for runtime fallback. */
+function loadOpenclawConfig(): { url?: string; token?: string; password?: string; agentId?: string } {
+  try {
+    const configPath = join(homedir(), ".openclaw", "openclaw.json");
+    if (!existsSync(configPath)) return {};
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+    const gw = config.gateway as Record<string, unknown> | undefined;
+    const auth = gw?.auth as Record<string, unknown> | undefined;
+    const port = gw?.port ?? 18789;
+    return {
+      url: `ws://127.0.0.1:${port}`,
+      token: auth?.mode === "token" && typeof auth.token === "string" ? auth.token : undefined,
+      password: typeof auth?.password === "string" ? auth.password : undefined,
+      agentId: typeof config.agentId === "string" ? config.agentId : undefined,
+    };
+  } catch { return {}; }
+}
+
 /**
  * Builds the complete runner configuration.
- * Loads .env files for local dev, reads all FLUX_* and OPENCLAW_* env vars,
- * fetches the SKILL.md, validates protocol version and orgId match, then
- * returns a fully resolved RunnerConfig ready for the main loop.
+ * Loads .env files for local dev, reads FLUX_* env vars with fallbacks to
+ * config files for secrets, fetches the SKILL.md, validates protocol version
+ * and orgId match, then returns a fully resolved RunnerConfig ready for the
+ * main loop.
  */
 export async function loadRunnerConfig(): Promise<RunnerConfig> {
   // Keep local dev ergonomic without overwriting already-exported vars.
@@ -147,8 +171,13 @@ export async function loadRunnerConfig(): Promise<RunnerConfig> {
     }
   }
 
-  const fluxToken = requiredEnv("FLUX_TOKEN");
-  const fluxHost = requiredEnv("FLUX_HOST");
+  // FLUX_TOKEN and FLUX_HOST: env vars first, then ~/.flux/config.json
+  const configFile = readConfigFile();
+  const fluxToken = process.env.FLUX_TOKEN?.trim() || configFile?.token;
+  if (!fluxToken) throw new Error("Missing required FLUX_TOKEN. Set env var or run 'fluxhive access redeem'.");
+  const fluxHost = process.env.FLUX_HOST?.trim() || configFile?.host;
+  if (!fluxHost) throw new Error("Missing required FLUX_HOST. Set env var or run 'fluxhive access redeem'.");
+
   const fluxOrgId = process.env.FLUX_ORG_ID?.trim() || null;
   const runnerType = process.env.FLUX_RUNNER_TYPE?.trim() || "fluxhive-openclaw-runner";
   const runnerVersion = process.env.FLUX_RUNNER_VERSION?.trim() || VERSION;
@@ -156,10 +185,13 @@ export async function loadRunnerConfig(): Promise<RunnerConfig> {
   const machineId = process.env.FLUX_MACHINE_ID?.trim() || process.env.HOSTNAME || "unknown";
   const cadenceMinutes = Math.max(1, parseNumberEnv("FLUX_CADENCE_MINUTES", 15));
   const pushReconnectMs = Math.max(250, parseNumberEnv("FLUX_PUSH_RECONNECT_MS", 5000));
-  const openclawGatewayUrl = process.env.OPENCLAW_GATEWAY_URL?.trim() || "";
-  const openclawGatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN?.trim();
-  const openclawGatewayPassword = process.env.OPENCLAW_GATEWAY_PASSWORD?.trim();
-  const openclawAgentId = process.env.OPENCLAW_AGENT_ID?.trim();
+
+  // OpenClaw: env vars first, then ~/.openclaw/openclaw.json
+  const oc = loadOpenclawConfig();
+  const openclawGatewayUrl = process.env.OPENCLAW_GATEWAY_URL?.trim() || oc.url || "";
+  const openclawGatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN?.trim() || oc.token;
+  const openclawGatewayPassword = process.env.OPENCLAW_GATEWAY_PASSWORD?.trim() || oc.password;
+  const openclawAgentId = process.env.OPENCLAW_AGENT_ID?.trim() || oc.agentId;
 
   const skill = await fetchSkillManifest(fluxHost, fluxOrgId, fluxToken);
   if (skill.frontmatter.protocolVersion !== "1") {

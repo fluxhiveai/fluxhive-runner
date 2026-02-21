@@ -8,8 +8,10 @@
  *   - macOS: launchd user agent (~/Library/LaunchAgents/ai.fluxhive.runner.plist)
  *   - Linux: systemd user service (~/.config/systemd/user/fluxhive-runner.service)
  *
- * The service captures current FLUX_* and OPENCLAW_* env vars and bakes them
- * into the service definition. A minimal PATH is constructed to ensure the
+ * The service captures non-secret FLUX_* config vars and bakes them into the
+ * service definition. Secrets (FLUX_TOKEN, OPENCLAW_*) are loaded at runtime
+ * from config files, never stored in the plist/unit. A minimal PATH is
+ * constructed to ensure the
  * service can find node regardless of shell initialization (covers nvm, pnpm,
  * volta, asdf, fnm, bun, and system paths).
  *
@@ -138,7 +140,6 @@ function buildMinimalServicePath(): string {
 }
 
 const ENV_KEYS = [
-  "FLUX_TOKEN",
   "FLUX_HOST",
   "FLUX_ORG_ID",
   "FLUX_CADENCE_MINUTES",
@@ -149,10 +150,6 @@ const ENV_KEYS = [
   "FLUX_BACKEND",
   "FLUX_ALLOW_DIRECT_CLI",
   "FLUX_PUSH_RECONNECT_MS",
-  "OPENCLAW_GATEWAY_URL",
-  "OPENCLAW_GATEWAY_TOKEN",
-  "OPENCLAW_GATEWAY_PASSWORD",
-  "OPENCLAW_AGENT_ID",
 ];
 
 /** Reads ~/.flux/config.json (written by `access redeem`). */
@@ -165,19 +162,18 @@ function readConfigFile(): { host?: string; token?: string; orgId?: string } | n
   }
 }
 
-/** Collects all FLUX_* and OPENCLAW_* env vars that are currently set,
- *  falling back to ~/.flux/config.json for token, host, and orgId. */
+/** Collects non-secret FLUX_* env vars for baking into the service definition,
+ *  falling back to ~/.flux/config.json for host and orgId. */
 function collectEnvVars(): Record<string, string> {
   const vars: Record<string, string> = {};
   for (const key of ENV_KEYS) {
     const val = process.env[key]?.trim();
     if (val) vars[key] = val;
   }
-  // Fall back to config file for core credentials (written by `access redeem`)
-  if (!vars.FLUX_TOKEN || !vars.FLUX_HOST) {
+  // Fall back to config file for non-secret values (written by `access redeem`)
+  if (!vars.FLUX_HOST) {
     const config = readConfigFile();
     if (config) {
-      if (!vars.FLUX_TOKEN && config.token) vars.FLUX_TOKEN = config.token;
       if (!vars.FLUX_HOST && config.host) vars.FLUX_HOST = config.host;
       if (!vars.FLUX_ORG_ID && config.orgId) vars.FLUX_ORG_ID = config.orgId;
     }
@@ -185,30 +181,18 @@ function collectEnvVars(): Record<string, string> {
   return vars;
 }
 
-/** Applies default values: 1-minute cadence, auto-detect OpenClaw gateway port. */
+/** Applies default values: 1-minute cadence. */
 function applyDefaults(envVars: Record<string, string>): void {
   if (!envVars.FLUX_CADENCE_MINUTES) {
     envVars.FLUX_CADENCE_MINUTES = "1";
   }
-  if (!envVars.OPENCLAW_GATEWAY_URL) {
-    const openclawConfig = join(homedir(), ".openclaw", "openclaw.json");
-    if (existsSync(openclawConfig)) {
-      try {
-        const config = JSON.parse(
-          readFileSync(openclawConfig, "utf8"),
-        ) as Record<string, unknown>;
-        const gw = config.gateway as Record<string, unknown> | undefined;
-        const port = gw?.port ?? 18789;
-        envVars.OPENCLAW_GATEWAY_URL = `ws://127.0.0.1:${port}`;
-      } catch {
-        // ignore
-      }
-    }
-  }
 }
 
 function validateEnvVars(envVars: Record<string, string>): void {
-  if (!envVars.FLUX_TOKEN) {
+  // FLUX_TOKEN is loaded at runtime from ~/.flux/config.json, not baked into the plist.
+  // Validate that it's available from either env or config file so the service can start.
+  const configFile = readConfigFile();
+  if (!process.env.FLUX_TOKEN?.trim() && !configFile?.token) {
     console.error(
       "Error: FLUX_TOKEN is required. Set FLUX_TOKEN env var or run 'fluxhive access redeem' first.",
     );
@@ -322,7 +306,7 @@ function launchdInstall(envVars: Record<string, string>): void {
   execLaunchctl(["unload", PLIST_PATH]);
 
   // Write plist and load
-  writeFileSync(PLIST_PATH, plist, { mode: 0o644 });
+  writeFileSync(PLIST_PATH, plist, { mode: 0o600 });
   execLaunchctl(["enable", `${domain}/${LABEL}`]);
   const boot = execLaunchctl(["bootstrap", domain, PLIST_PATH]);
   if (boot.code !== 0) {

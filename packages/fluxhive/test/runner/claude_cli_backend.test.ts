@@ -193,6 +193,44 @@ describe("ClaudeCliExecutionBackend", () => {
     );
   });
 
+  it("spawn env does NOT contain FLUX_TOKEN or OPENCLAW_* secrets", async () => {
+    // Set secrets in process.env to verify they're excluded
+    const origToken = process.env.FLUX_TOKEN;
+    const origOcUrl = process.env.OPENCLAW_GATEWAY_URL;
+    const origOcToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+    const origOcPw = process.env.OPENCLAW_GATEWAY_PASSWORD;
+    const origOcAgent = process.env.OPENCLAW_AGENT_ID;
+    process.env.FLUX_TOKEN = "secret-tok";
+    process.env.OPENCLAW_GATEWAY_URL = "ws://secret";
+    process.env.OPENCLAW_GATEWAY_TOKEN = "secret-gw-tok";
+    process.env.OPENCLAW_GATEWAY_PASSWORD = "secret-pw";
+    process.env.OPENCLAW_AGENT_ID = "secret-agent";
+
+    const child = new MockChildProcess();
+    vi.mocked(spawn).mockReturnValue(child as never);
+
+    const backend = new ClaudeCliExecutionBackend();
+    const p = backend.execute(makeRequest() as never);
+    child.emit("close", 0);
+    await p;
+
+    const spawnCall = vi.mocked(spawn).mock.calls[0];
+    const spawnEnv = spawnCall[2]?.env as Record<string, string> | undefined;
+    expect(spawnEnv).toBeDefined();
+    expect(spawnEnv).not.toHaveProperty("FLUX_TOKEN");
+    expect(spawnEnv).not.toHaveProperty("OPENCLAW_GATEWAY_URL");
+    expect(spawnEnv).not.toHaveProperty("OPENCLAW_GATEWAY_TOKEN");
+    expect(spawnEnv).not.toHaveProperty("OPENCLAW_GATEWAY_PASSWORD");
+    expect(spawnEnv).not.toHaveProperty("OPENCLAW_AGENT_ID");
+
+    // Restore
+    if (origToken === undefined) delete process.env.FLUX_TOKEN; else process.env.FLUX_TOKEN = origToken;
+    if (origOcUrl === undefined) delete process.env.OPENCLAW_GATEWAY_URL; else process.env.OPENCLAW_GATEWAY_URL = origOcUrl;
+    if (origOcToken === undefined) delete process.env.OPENCLAW_GATEWAY_TOKEN; else process.env.OPENCLAW_GATEWAY_TOKEN = origOcToken;
+    if (origOcPw === undefined) delete process.env.OPENCLAW_GATEWAY_PASSWORD; else process.env.OPENCLAW_GATEWAY_PASSWORD = origOcPw;
+    if (origOcAgent === undefined) delete process.env.OPENCLAW_AGENT_ID; else process.env.OPENCLAW_AGENT_ID = origOcAgent;
+  });
+
   it("uses CLAUDE_BIN env var when set and exists", async () => {
     const origEnv = process.env.CLAUDE_BIN;
     process.env.CLAUDE_BIN = "/custom/claude";

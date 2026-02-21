@@ -25,7 +25,7 @@ const CONFIG_DIR = path.join(os.homedir(), ".flux");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
 /** Read the config file, returning null if it doesn't exist. */
-function readConfigFile(): ConfigFileData | null {
+export function readConfigFile(): ConfigFileData | null {
   try {
     const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
     return JSON.parse(raw) as ConfigFileData;

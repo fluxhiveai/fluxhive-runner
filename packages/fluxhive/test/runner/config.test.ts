@@ -6,13 +6,33 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 // For loadRunnerConfig, we mock fetch to serve SKILL.md content.
 
 // ---------------------------------------------------------------------------
-// Import the module under test (loadRunnerConfig is the only export)
+// Set up mocks before importing (module-level execution order matters)
 // ---------------------------------------------------------------------------
+
+import os from "node:os";
+import path from "node:path";
+import fs from "node:fs";
+
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "flux-config-test-"));
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import("node:os");
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      homedir: () => tempDir,
+      platform: actual.platform,
+    },
+    homedir: () => tempDir,
+    platform: actual.platform,
+  };
+});
 
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
-// We need to import after stubbing fetch
+// We need to import after stubbing fetch and mocking os
 const { loadRunnerConfig } = await import("../../src/runner/config.ts");
 
 // ---------------------------------------------------------------------------
@@ -231,14 +251,14 @@ describe("loadRunnerConfig", () => {
     expect(config.cadenceMinutes).toBeGreaterThanOrEqual(1);
   });
 
-  it("throws on missing FLUX_TOKEN", async () => {
+  it("throws on missing FLUX_TOKEN (no env, no config file)", async () => {
     delete process.env.FLUX_TOKEN;
-    await expect(loadRunnerConfig()).rejects.toThrow("Missing required env var FLUX_TOKEN");
+    await expect(loadRunnerConfig()).rejects.toThrow("Missing required FLUX_TOKEN");
   });
 
-  it("throws on missing FLUX_HOST", async () => {
+  it("throws on missing FLUX_HOST (no env, no config file)", async () => {
     delete process.env.FLUX_HOST;
-    await expect(loadRunnerConfig()).rejects.toThrow("Missing required env var FLUX_HOST");
+    await expect(loadRunnerConfig()).rejects.toThrow("Missing required FLUX_HOST");
   });
 
   it("throws on protocol version mismatch", async () => {
@@ -343,5 +363,52 @@ describe("loadRunnerConfig", () => {
 
     const config = await loadRunnerConfig();
     expect(config.pushReconnectMs).toBe(250);
+  });
+
+  it("falls back to ~/.flux/config.json for FLUX_TOKEN and FLUX_HOST", async () => {
+    delete process.env.FLUX_TOKEN;
+    delete process.env.FLUX_HOST;
+
+    // Write config file in mocked home
+    const fluxDir = path.join(tempDir, ".flux");
+    fs.mkdirSync(fluxDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(fluxDir, "config.json"),
+      JSON.stringify({ host: "https://from-config.test", token: "tok-cfg" }),
+    );
+
+    const skillMd = buildSkillMd();
+    mockFetchSkillMd(skillMd);
+
+    const config = await loadRunnerConfig();
+    expect(config.fluxToken).toBe("tok-cfg");
+    expect(config.fluxHost).toBe("https://from-config.test");
+  });
+
+  it("falls back to ~/.openclaw/openclaw.json for OpenClaw config", async () => {
+    delete process.env.OPENCLAW_GATEWAY_URL;
+    delete process.env.OPENCLAW_GATEWAY_TOKEN;
+    delete process.env.OPENCLAW_GATEWAY_PASSWORD;
+    delete process.env.OPENCLAW_AGENT_ID;
+
+    // Write openclaw config in mocked home
+    const ocDir = path.join(tempDir, ".openclaw");
+    fs.mkdirSync(ocDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(ocDir, "openclaw.json"),
+      JSON.stringify({
+        gateway: { port: 19999, auth: { mode: "token", token: "oc-tok", password: "oc-pw" } },
+        agentId: "oc-agent",
+      }),
+    );
+
+    const skillMd = buildSkillMd();
+    mockFetchSkillMd(skillMd);
+
+    const config = await loadRunnerConfig();
+    expect(config.openclawGatewayUrl).toBe("ws://127.0.0.1:19999");
+    expect(config.openclawGatewayToken).toBe("oc-tok");
+    expect(config.openclawGatewayPassword).toBe("oc-pw");
+    expect(config.openclawAgentId).toBe("oc-agent");
   });
 });

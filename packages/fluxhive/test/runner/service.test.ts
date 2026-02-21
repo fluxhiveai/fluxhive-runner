@@ -106,7 +106,7 @@ describe("handleServiceCommand", () => {
     }
   });
 
-  it("install reads credentials from ~/.flux/config.json when env vars missing", () => {
+  it("install succeeds when token is only in ~/.flux/config.json (token NOT in plist)", () => {
     if (os.platform() !== "darwin") return;
 
     // Remove env vars
@@ -127,11 +127,13 @@ describe("handleServiceCommand", () => {
       expect((err as ProcessExitError).code).toBe(0);
     }
 
-    // Verify the plist was written with config file values
+    // Verify the plist was written with non-secret config file values
     const plistPath = path.join(tempDir, "Library", "LaunchAgents", "ai.fluxhive.runner.plist");
     if (fs.existsSync(plistPath)) {
       const content = fs.readFileSync(plistPath, "utf8");
-      expect(content).toContain("tok-from-config");
+      // Token must NOT appear in plist — loaded at runtime
+      expect(content).not.toContain("tok-from-config");
+      // Non-secret host and orgId should be present
       expect(content).toContain("config-file.test");
       expect(content).toContain("org-cfg");
     }
@@ -158,7 +160,8 @@ describe("handleServiceCommand", () => {
       expect(plistContent).toContain("<key>KeepAlive</key>");
       expect(plistContent).toContain("<key>ProgramArguments</key>");
       expect(plistContent).toContain("<key>EnvironmentVariables</key>");
-      expect(plistContent).toContain("tok-test");
+      // Token must NOT appear in plist — loaded at runtime from config file
+      expect(plistContent).not.toContain("tok-test");
       expect(plistContent).toContain("https://fluxhive.test");
     }
   });
@@ -349,9 +352,8 @@ describe("getRunnerEntrypoint logic", () => {
 // ---------------------------------------------------------------------------
 
 describe("env var handling", () => {
-  it("FLUX_* and OPENCLAW_* env vars are recognized", () => {
+  it("ENV_KEYS contains only non-secret FLUX_* config vars (no secrets, no OPENCLAW_*)", () => {
     const ENV_KEYS = [
-      "FLUX_TOKEN",
       "FLUX_HOST",
       "FLUX_ORG_ID",
       "FLUX_CADENCE_MINUTES",
@@ -362,17 +364,19 @@ describe("env var handling", () => {
       "FLUX_BACKEND",
       "FLUX_ALLOW_DIRECT_CLI",
       "FLUX_PUSH_RECONNECT_MS",
-      "OPENCLAW_GATEWAY_URL",
-      "OPENCLAW_GATEWAY_TOKEN",
-      "OPENCLAW_GATEWAY_PASSWORD",
-      "OPENCLAW_AGENT_ID",
     ];
 
-    // All these env keys should match the expected naming pattern
+    // All env keys should be non-secret FLUX_* vars
     for (const key of ENV_KEYS) {
-      expect(key).toMatch(/^(FLUX_|OPENCLAW_)/);
+      expect(key).toMatch(/^FLUX_/);
     }
-    expect(ENV_KEYS).toHaveLength(15);
+    expect(ENV_KEYS).toHaveLength(10);
+    // Secrets must NOT be in ENV_KEYS
+    expect(ENV_KEYS).not.toContain("FLUX_TOKEN");
+    expect(ENV_KEYS).not.toContain("OPENCLAW_GATEWAY_URL");
+    expect(ENV_KEYS).not.toContain("OPENCLAW_GATEWAY_TOKEN");
+    expect(ENV_KEYS).not.toContain("OPENCLAW_GATEWAY_PASSWORD");
+    expect(ENV_KEYS).not.toContain("OPENCLAW_AGENT_ID");
   });
 });
 
@@ -411,11 +415,17 @@ describe("plist XML structure (install output)", () => {
     if (!fs.existsSync(plistPath)) return;
 
     const content = fs.readFileSync(plistPath, "utf8");
-    expect(content).toContain("tok-plist");
+    // Token must NOT be in plist — loaded at runtime
+    expect(content).not.toContain("tok-plist");
+    // Non-secret config values should be present
     expect(content).toContain("fluxhive.plist.test");
     expect(content).toContain("org-plist");
     // FLUX_CADENCE_MINUTES should default to 1
     expect(content).toContain("FLUX_CADENCE_MINUTES");
+    // No OPENCLAW_* secrets in plist
+    expect(content).not.toContain("OPENCLAW_GATEWAY_TOKEN");
+    expect(content).not.toContain("OPENCLAW_GATEWAY_PASSWORD");
+    expect(content).not.toContain("OPENCLAW_AGENT_ID");
   });
 
   it("plist creates log directory", () => {
