@@ -155,6 +155,7 @@ export class FluxApiClient {
     streamId?: string;
     skillId?: string;
     priority?: number;
+    status?: string;
     executionBackend?: string;
     executionModel?: string;
     dependencies?: string[];

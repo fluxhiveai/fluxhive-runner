@@ -74,6 +74,7 @@ export function registerTaskCommands(program: Command): void {
     .requiredOption("--goal <goal>", "Task goal")
     .requiredOption("--input <input>", "Task input")
     .option("--type <type>", "Task type", "general")
+    .option("--status <status>", "Initial status (todo, review, doing, blocked)")
     .option("--stream-id <id>", "Stream ID")
     .option("--skill-id <id>", "Skill ID")
     .option("--priority <n>", "Priority (lower = higher priority)")
@@ -92,6 +93,7 @@ export function registerTaskCommands(program: Command): void {
           type: opts.type,
           goal: opts.goal,
           input: opts.input,
+          status: opts.status,
           streamId: opts.streamId,
           skillId: opts.skillId,
           priority: opts.priority ? parseInt(opts.priority, 10) : undefined,
