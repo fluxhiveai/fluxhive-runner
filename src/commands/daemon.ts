@@ -56,6 +56,12 @@ function log(level: "info" | "warn" | "error", message: string, fields?: Record<
 }
 
 async function runDaemon() {
+  // Ensure ~/.flux/package.json stub exists — pi-agent-core reads package.json
+  // from the bundle's directory at import time and crashes without it.
+  const fluxDir = join(homedir(), ".flux");
+  mkdirSync(fluxDir, { recursive: true });
+  writeFileSync(join(fluxDir, "package.json"), JSON.stringify({ name: "fluxhive-runner", version: "0.0.0", type: "module" }) + "\n");
+
   const config = await loadRunnerConfig();
   log("info", "runner.start", {
     fluxHost: config.fluxHost,

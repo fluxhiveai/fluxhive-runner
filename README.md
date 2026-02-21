@@ -10,8 +10,14 @@ This repo ships a **single-file executable** (`fluxhive-runner.mjs`) via GitHub 
 
 Release assets:
 
-- `fluxhive-runner.mjs`
-- `fluxhive-runner.mjs.sha256`
+- `fluxhive.mjs`
+- `fluxhive.mjs.sha256`
+
+Always verify the checksum after downloading:
+
+```bash
+shasum -a 256 -c fluxhive.mjs.sha256
+```
 
 ## Run
 

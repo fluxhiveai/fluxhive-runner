@@ -7,7 +7,20 @@ This guide walks through setting up and running `@fluxhive/runner` from source.
 - **Node.js 20+** (LTS recommended)
 - **pnpm** (the repo uses `pnpm@10.28.0` as its package manager)
 
-## Clone and Install
+## Option A: Download Pre-built Bundle
+
+Download the latest release and verify its checksum:
+
+```bash
+mkdir -p ~/.flux && cd ~/.flux
+curl -LO https://github.com/fluxhiveai/fluxhive-runner/releases/latest/download/fluxhive.mjs
+curl -LO https://github.com/fluxhiveai/fluxhive-runner/releases/latest/download/fluxhive.mjs.sha256
+shasum -a 256 -c fluxhive.mjs.sha256
+```
+
+Then skip to **Authenticate** below.
+
+## Option B: Build from Source
 
 ```bash
 git clone <repo-url> flux-runner
@@ -15,9 +28,7 @@ cd flux-runner
 pnpm install
 ```
 
-## Build
-
-The runner must be compiled from TypeScript before running:
+Compile from TypeScript:
 
 ```bash
 pnpm build
@@ -29,9 +40,17 @@ To produce a single bundled file (`dist/fluxhive.mjs`):
 pnpm bundle
 ```
 
-## Required Environment Variables
+## Authenticate
 
-You must set two environment variables before starting the runner:
+Before running, redeem an invite code to save credentials locally:
+
+```bash
+node dist/fluxhive.mjs access redeem --org <orgId> --invite <code> --label <name>
+```
+
+This saves `FLUX_TOKEN` and `FLUX_HOST` to `~/.flux/config.json`, which the runner reads at runtime. All credential files are automatically created with `0600` permissions (owner-only read/write).
+
+Alternatively, you can set environment variables directly:
 
 | Variable      | Description                                              |
 | ------------- | -------------------------------------------------------- |
@@ -85,12 +104,11 @@ All output is structured JSON, one line per log entry:
 The runner can install itself as a persistent background service that starts on boot and restarts on failure:
 
 ```bash
-# Make sure FLUX_TOKEN and FLUX_HOST are set in your environment
-export FLUX_TOKEN="your-token-here"
-export FLUX_HOST="https://app.fluxhive.com"
+# If you haven't already authenticated:
+node dist/fluxhive.mjs access redeem --org <orgId> --invite <code> --label <name>
 
 # Install and start the service
-node dist/fluxhive.mjs --service install
+node dist/fluxhive.mjs runner install
 ```
 
 This creates:
@@ -105,7 +123,7 @@ The service reads environment variables from `~/.flux/.env` at runtime — secre
 Check that the service is running:
 
 ```bash
-node dist/fluxhive.mjs --service status
+node dist/fluxhive.mjs runner status
 ```
 
 This prints the service state, PID (if running), and recent log output.
@@ -114,13 +132,13 @@ This prints the service state, PID (if running), and recent log output.
 
 ```bash
 # Restart the service
-node dist/fluxhive.mjs --service restart
+node dist/fluxhive.mjs runner restart
 
 # Stop the service
-node dist/fluxhive.mjs --service stop
+node dist/fluxhive.mjs runner stop
 
 # Uninstall the service completely
-node dist/fluxhive.mjs --service uninstall
+node dist/fluxhive.mjs runner uninstall
 ```
 
 ## Logs
