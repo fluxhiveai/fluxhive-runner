@@ -6,6 +6,7 @@ import { Command } from "commander";
 // ---------------------------------------------------------------------------
 
 const mockLoadRunnerConfig = vi.fn();
+const mockFetchSkillManifest = vi.fn();
 const mockWhoami = vi.fn();
 const mockHandshake = vi.fn();
 const mockHello = vi.fn();
@@ -18,9 +19,18 @@ const mockCadenceStop = vi.fn();
 const mockCadenceTriggerNow = vi.fn();
 const mockPushStop = vi.fn();
 const mockOpenclawClose = vi.fn();
+const mockOpenclawExecute = vi.fn();
+const mockMkdirSync = vi.fn();
+const mockWriteFileSync = vi.fn();
+
+vi.mock("node:fs", () => ({
+  mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
+  writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
+}));
 
 vi.mock("../../src/runner/config.js", () => ({
   loadRunnerConfig: () => mockLoadRunnerConfig(),
+  fetchSkillManifest: (...args: unknown[]) => mockFetchSkillManifest(...args),
 }));
 
 vi.mock("../../src/runner/client.js", () => ({
@@ -35,6 +45,7 @@ vi.mock("../../src/runner/openclaw.js", () => ({
   OpenClawClient: vi.fn().mockImplementation(() => ({
     ping: mockPing,
     close: mockOpenclawClose,
+    execute: mockOpenclawExecute,
   })),
 }));
 
@@ -85,7 +96,8 @@ function baseConfig() {
     fluxToken: "tok",
     fluxOrgId: "org-1",
     skillManifestUrl: "",
-    skillManifestFrontmatter: { mcpPushWs: null },
+    skillManifestBody: "---\nprotocolVersion: \"1\"\norgId: org-1\n---\n# Test SKILL.md\n",
+    skillManifestFrontmatter: { mcpPushWs: null, updatedAt: "2026-02-20" },
     runnerType: "test",
     runnerVersion: "1.0",
     runnerInstanceId: "inst-1",
@@ -377,5 +389,34 @@ describe("daemon command", () => {
     ).rejects.toThrow();
     // The key assertion: cadenceStart was reached, meaning hello didn't block
     expect(mockCadenceStart).toHaveBeenCalled();
+  });
+
+  it("saves initial SKILL.md to ~/.flux/SKILL.md on startup", async () => {
+    mockPreflight.mockResolvedValue({ ok: true });
+    mockCadenceStart.mockImplementation(() => {
+      throw new Error("break");
+    });
+
+    process.exit = ((code: number) => {
+      throw new Error(`process.exit(${code})`);
+    }) as never;
+
+    const program = new Command();
+    registerDaemonCommand(program);
+    program.exitOverride();
+
+    await expect(
+      program.parseAsync(["node", "fluxhive", "daemon"]),
+    ).rejects.toThrow();
+
+    expect(mockMkdirSync).toHaveBeenCalledWith(
+      expect.stringContaining(".flux"),
+      { recursive: true },
+    );
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      expect.stringContaining("SKILL.md"),
+      expect.stringContaining("# Test SKILL.md"),
+      "utf8",
+    );
   });
 });

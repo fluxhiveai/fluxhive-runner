@@ -109,7 +109,7 @@ function resolveMcpBase(fluxHost: string, fm: SkillManifestFrontmatter): string 
  * When orgId is null, fetches `/SKILL.md` with Bearer auth (the server
  * derives the org from the token).
  */
-async function fetchSkillManifest(
+export async function fetchSkillManifest(
   fluxHost: string,
   orgId: string | null,
   token?: string,

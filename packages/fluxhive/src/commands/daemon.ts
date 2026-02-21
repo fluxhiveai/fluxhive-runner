@@ -11,8 +11,11 @@
  *   7. On SIGINT/SIGTERM, gracefully shut down all components
  */
 import type { Command } from "commander";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import process from "node:process";
-import { loadRunnerConfig } from "../runner/config.js";
+import { loadRunnerConfig, fetchSkillManifest } from "../runner/config.js";
 import { FluxMcpClient } from "../runner/client.js";
 import { OpenClawClient } from "../runner/openclaw.js";
 import { FluxPushClient } from "../runner/push.js";
@@ -240,13 +243,58 @@ async function runDaemon() {
     });
   }
 
+  // Save initial SKILL.md to ~/.flux/SKILL.md
+  const skillMdDir = join(homedir(), ".flux");
+  const skillMdPath = join(skillMdDir, "SKILL.md");
+  let lastSkillUpdatedAt = config.skillManifestFrontmatter.updatedAt || "";
+  try {
+    mkdirSync(skillMdDir, { recursive: true });
+    writeFileSync(skillMdPath, config.skillManifestBody, "utf8");
+    log("info", "skill.saved", { path: skillMdPath });
+  } catch (err) {
+    log("warn", "skill.save.error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   cadence.start();
   log("info", "runner.ready", {
     cadenceMinutes: config.cadenceMinutes,
   });
 
+  // Periodically check for SKILL.md updates on each cadence cycle
+  const skillCheckTimer = setInterval(async () => {
+    try {
+      const skill = await fetchSkillManifest(config.fluxHost, config.fluxOrgId, config.fluxToken);
+      const newUpdatedAt = skill.frontmatter.updatedAt || "";
+      if (newUpdatedAt && newUpdatedAt > lastSkillUpdatedAt) {
+        writeFileSync(skillMdPath, skill.body, "utf8");
+        lastSkillUpdatedAt = newUpdatedAt;
+        log("info", "skill.updated", { path: skillMdPath, updatedAt: newUpdatedAt });
+        // Notify the agent via OpenClaw if connected
+        if (openclawClient) {
+          try {
+            await openclawClient.execute({
+              prompt: `FluxHive SKILL.md updated (${newUpdatedAt}) — new capabilities available. Review at ~/.flux/SKILL.md`,
+              sessionKey: `skill-update-${newUpdatedAt}`,
+              deliver: true,
+              timeoutSec: 10,
+            });
+          } catch {
+            // Best-effort notification
+          }
+        }
+      }
+    } catch (err) {
+      log("warn", "skill.check.error", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, config.cadenceMinutes * 60_000);
+
   const shutdown = async (signal: string) => {
     log("info", "runner.shutdown", { signal });
+    clearInterval(skillCheckTimer);
     cadence.stop();
     pushClient?.stop();
     openclawClient?.close();
