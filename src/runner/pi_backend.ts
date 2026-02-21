@@ -303,12 +303,21 @@ export class PiExecutionBackend implements RunnerExecutionBackend {
       }
 
       const usage = lastAssistant?.usage;
+      const usageObj: Record<string, unknown> = {};
+      if (usage?.totalTokens !== undefined) usageObj.tokensUsed = usage.totalTokens;
+      if (usage?.input !== undefined) usageObj.inputTokens = usage.input;
+      if (usage?.output !== undefined) usageObj.outputTokens = usage.output;
+      if (usage?.cost?.total !== undefined) usageObj.costUsd = usage.cost.total;
+      if (modelRefRaw) usageObj.model = modelRefRaw;
+
       return {
         status,
         output: finalOutput,
         tokensUsed: usage?.totalTokens,
         costUsd: usage?.cost?.total,
         durationMs: Math.max(0, Date.now() - request.startedAt),
+        model: modelRefRaw,
+        usageJson: Object.keys(usageObj).length > 0 ? JSON.stringify(usageObj) : undefined,
       };
     } finally {
       request.abortSignal.removeEventListener("abort", onAbort);

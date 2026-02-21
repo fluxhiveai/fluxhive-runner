@@ -142,6 +142,8 @@ export class TaskExecutor {
         costUsd: result.costUsd,
         durationMs:
           typeof result.durationMs === "number" ? result.durationMs : Date.now() - startTime,
+        model: result.model,
+        usageJson: result.usageJson,
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);

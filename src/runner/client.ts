@@ -171,6 +171,8 @@ export class FluxMcpClient {
       tokensUsed?: number;
       costUsd?: number;
       durationMs?: number;
+      model?: string;
+      usageJson?: string;
     },
   ): Promise<JsonRecord> {
     return await this.request<JsonRecord>("POST", `/tasks/${encodeURIComponent(taskId)}/complete`, {

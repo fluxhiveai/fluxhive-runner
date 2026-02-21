@@ -187,6 +187,7 @@ export class ClaudeCliExecutionBackend implements RunnerExecutionBackend {
       status: "done",
       output: output.trim().length > 0 ? output : "(empty response)",
       durationMs,
+      model: model || "claude-cli",
     };
   }
 }

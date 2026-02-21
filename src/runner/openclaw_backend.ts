@@ -126,6 +126,13 @@ export class OpenClawExecutionBackend implements RunnerExecutionBackend {
     const output = extractOutput(result);
     const errored = hasErrorPayload(result);
     const status = result.aborted ? "cancelled" : errored ? "failed" : "done";
+    const usageObj: Record<string, unknown> = {};
+    if (result.usage?.input !== undefined) usageObj.inputTokens = result.usage.input;
+    if (result.usage?.output !== undefined) usageObj.outputTokens = result.usage.output;
+    if (result.usage?.total !== undefined) usageObj.tokensUsed = result.usage.total;
+    if (result.model) usageObj.model = result.model;
+    if (result.provider) usageObj.provider = result.provider;
+
     return {
       status,
       output:
@@ -139,6 +146,8 @@ export class OpenClawExecutionBackend implements RunnerExecutionBackend {
         typeof result.durationMs === "number"
           ? result.durationMs
           : Math.max(0, Date.now() - request.startedAt),
+      model: result.model,
+      usageJson: Object.keys(usageObj).length > 0 ? JSON.stringify(usageObj) : undefined,
     };
   }
 }

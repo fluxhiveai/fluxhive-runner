@@ -27,6 +27,8 @@ export type RunnerExecutionResult = {
   tokensUsed?: number;
   costUsd?: number;
   durationMs?: number;
+  model?: string;
+  usageJson?: string;
 };
 
 /**
