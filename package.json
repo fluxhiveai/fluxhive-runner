@@ -1,16 +1,39 @@
 {
-  "name": "fluxhive-runner-repo",
+  "name": "@fluxhive/cli",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.28.0",
+  "bin": {
+    "fluxhive": "./dist/fluxhive.mjs"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "bundle": "node scripts/bundle.mjs",
+    "start": "node dist/fluxhive.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mariozechner/pi-agent-core": "0.52.12",
+    "@mariozechner/pi-ai": "0.52.12",
+    "@mariozechner/pi-coding-agent": "0.52.12",
+    "ajv": "^8.17.1",
+    "commander": "^13.1.0",
+    "ws": "^8.18.3",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^2.1.9",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.9"
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
       "protobufjs"
     ]
-  },
-  "scripts": {
-    "test": "pnpm -r --if-present test",
-    "bundle": "pnpm -C packages/fluxhive bundle"
   }
 }

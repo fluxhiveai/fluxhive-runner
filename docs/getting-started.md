@@ -20,13 +20,13 @@ pnpm install
 The runner must be compiled from TypeScript before running:
 
 ```bash
-pnpm -C packages/runner build
+pnpm build
 ```
 
-To produce a single bundled file (`dist/fluxhive-runner.mjs`):
+To produce a single bundled file (`dist/fluxhive.mjs`):
 
 ```bash
-pnpm -C packages/runner bundle
+pnpm bundle
 ```
 
 ## Required Environment Variables
@@ -58,13 +58,13 @@ Key optional variables:
 Start the runner directly:
 
 ```bash
-pnpm -C packages/runner start
+pnpm start
 ```
 
 Or after building:
 
 ```bash
-node packages/runner/dist/fluxhive-runner.mjs
+node dist/fluxhive.mjs
 ```
 
 The runner will:
@@ -90,7 +90,7 @@ export FLUX_TOKEN="your-token-here"
 export FLUX_HOST="https://app.fluxhive.com"
 
 # Install and start the service
-node packages/runner/dist/fluxhive-runner.mjs --service install
+node dist/fluxhive.mjs --service install
 ```
 
 This creates:
@@ -98,14 +98,14 @@ This creates:
 - **macOS**: A launchd plist at `~/Library/LaunchAgents/ai.fluxhive.runner.plist`
 - **Linux**: A systemd user unit at `~/.config/systemd/user/fluxhive-runner.service`
 
-All current environment variables (FLUX_TOKEN, FLUX_HOST, OPENCLAW_GATEWAY_URL, etc.) are baked into the service definition at install time.
+The service reads environment variables from `~/.flux/.env` at runtime — secrets are never baked into the service definition.
 
 ## Verifying the Service
 
 Check that the service is running:
 
 ```bash
-node packages/runner/dist/fluxhive-runner.mjs --service status
+node dist/fluxhive.mjs --service status
 ```
 
 This prints the service state, PID (if running), and recent log output.
@@ -114,13 +114,13 @@ This prints the service state, PID (if running), and recent log output.
 
 ```bash
 # Restart the service
-node packages/runner/dist/fluxhive-runner.mjs --service restart
+node dist/fluxhive.mjs --service restart
 
 # Stop the service
-node packages/runner/dist/fluxhive-runner.mjs --service stop
+node dist/fluxhive.mjs --service stop
 
 # Uninstall the service completely
-node packages/runner/dist/fluxhive-runner.mjs --service uninstall
+node dist/fluxhive.mjs --service uninstall
 ```
 
 ## Logs
