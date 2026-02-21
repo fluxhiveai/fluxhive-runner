@@ -403,7 +403,6 @@ function launchdUninstall(): void {
   if (existsSync(PLIST_PATH)) unlinkSync(PLIST_PATH);
   console.log(`Uninstalled ${LABEL}`);
   console.log(`  Removed: ${PLIST_PATH}`);
-  console.log(`  Note: config and tokens remain at ~/.flux — remove manually or re-run with --clean`);
 }
 
 function launchdStatus(): void {
@@ -578,7 +577,6 @@ function systemdUninstall(): void {
   execSystemctl(["--user", "daemon-reload"]);
   console.log(`Uninstalled ${SYSTEMD_UNIT}`);
   console.log(`  Removed: ${systemdUnitPath()}`);
-  console.log(`  Note: config and tokens remain at ~/.flux — remove manually or re-run with --clean`);
 }
 
 function systemdStatus(): void {
@@ -662,8 +660,10 @@ export function handleServiceCommand(action: string, opts?: { clean?: boolean })
         const fluxDir = join(homedir(), ".flux");
         if (existsSync(fluxDir)) {
           rmSync(fluxDir, { recursive: true, force: true });
-          console.log(`Removed ${fluxDir} (config, tokens, logs)`);
+          console.log(`  Removed: ${fluxDir} (config, tokens, logs)`);
         }
+      } else {
+        console.log("  Note: config and tokens remain at ~/.flux — remove manually or re-run with --clean");
       }
       process.exit(0);
     });

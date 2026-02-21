@@ -9,24 +9,6 @@
  *   --host       Flux API host (overrides FLUX_HOST / config file)
  *   --token      Flux API token (overrides FLUX_TOKEN / config file)
  */
-
-// pi-agent-core reads package.json from the bundle's directory at module load
-// time. When running standalone from ~/.flux/ (no repo), we must create a stub
-// BEFORE any imports that transitively pull in pi-agent-core.
-import { existsSync as _exists, writeFileSync as _write, mkdirSync as _mkdir } from "node:fs";
-import { dirname as _dirname, join as _join } from "node:path";
-import { fileURLToPath as _toPath } from "node:url";
-const _bundleDir = _dirname(_toPath(import.meta.url));
-const _stubPkg = _join(_bundleDir, "package.json");
-if (!_exists(_stubPkg)) {
-  try {
-    _mkdir(_bundleDir, { recursive: true });
-    _write(_stubPkg, '{"name":"fluxhive-runner","version":"0.0.0","type":"module"}\n');
-  } catch {
-    // Best-effort — if we can't write (e.g. read-only fs), pi will fail with its own error
-  }
-}
-
 import { Command } from "commander";
 import { registerAuthCommands } from "./commands/auth.js";
 import { registerTaskCommands } from "./commands/tasks.js";
