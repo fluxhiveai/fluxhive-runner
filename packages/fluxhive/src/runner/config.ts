@@ -16,6 +16,7 @@ import process from "node:process";
 import { randomUUID } from "node:crypto";
 import YAML from "yaml";
 import type { RunnerConfig, SkillManifestFrontmatter } from "../types.js";
+import { VERSION } from "../version.js";
 
 /** Reads a required environment variable or throws with a clear message. */
 function requiredEnv(name: string): string {
@@ -150,7 +151,7 @@ export async function loadRunnerConfig(): Promise<RunnerConfig> {
   const fluxHost = requiredEnv("FLUX_HOST");
   const fluxOrgId = process.env.FLUX_ORG_ID?.trim() || null;
   const runnerType = process.env.FLUX_RUNNER_TYPE?.trim() || "fluxhive-openclaw-runner";
-  const runnerVersion = process.env.FLUX_RUNNER_VERSION?.trim() || "0.1.0";
+  const runnerVersion = process.env.FLUX_RUNNER_VERSION?.trim() || VERSION;
   const runnerInstanceId = process.env.FLUX_RUNNER_ID?.trim() || randomUUID();
   const machineId = process.env.FLUX_MACHINE_ID?.trim() || process.env.HOSTNAME || "unknown";
   const cadenceMinutes = Math.max(1, parseNumberEnv("FLUX_CADENCE_MINUTES", 15));

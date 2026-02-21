@@ -16,13 +16,15 @@ import { registerStreamCommands } from "./commands/streams.js";
 import { registerConfigCommands } from "./commands/config-cmd.js";
 import { registerRunnerCommands } from "./commands/runner.js";
 import { registerDaemonCommand } from "./commands/daemon.js";
+import { registerUpdateCommand } from "./commands/update.js";
+import { VERSION } from "./version.js";
 
 const program = new Command();
 
 program
   .name("fluxhive")
   .description("FluxHive CLI — manage agents, tasks, streams, and the runner service")
-  .version("0.1.0")
+  .version(VERSION)
   .option("--json", "Output as JSON")
   .option("--quiet", "Suppress non-essential output")
   .option("--host <url>", "Flux API host")
@@ -34,6 +36,7 @@ registerStreamCommands(program);
 registerConfigCommands(program);
 registerRunnerCommands(program);
 registerDaemonCommand(program);
+registerUpdateCommand(program);
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : String(err));

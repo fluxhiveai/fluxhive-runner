@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,7 @@ function resolveOutfile() {
 async function main() {
   const outfile = resolveOutfile();
   const entry = path.resolve(cliRoot, "src/index.ts");
+  const pkg = JSON.parse(readFileSync(path.resolve(cliRoot, "package.json"), "utf8"));
 
   await build({
     entryPoints: [entry],
@@ -35,6 +37,9 @@ async function main() {
     packages: "bundle",
     sourcemap: false,
     logLevel: "info",
+    define: {
+      __FLUXHIVE_VERSION__: JSON.stringify(pkg.version),
+    },
     banner: {
       js: [
         "#!/usr/bin/env node",

@@ -227,7 +227,7 @@ describe("loadRunnerConfig", () => {
     expect(config.fluxToken).toBe("tok-abc");
     expect(config.fluxOrgId).toBe("org-test-123");
     expect(config.runnerType).toBe("fluxhive-openclaw-runner");
-    expect(config.runnerVersion).toBe("0.1.0");
+    expect(config.runnerVersion).toBe("0.0.0-dev");
     expect(config.cadenceMinutes).toBeGreaterThanOrEqual(1);
   });
 
