@@ -177,10 +177,12 @@ describe("handleServiceCommand", () => {
     }
   });
 
-  it("restart exits 1 when plist does not exist", async () => {
-    // Uninstall is async (notifyDisconnect), so wait for it to complete
+  it("restart exits 1 when service file does not exist", async () => {
+    // Remove both macOS plist and Linux systemd unit so this works on either CI platform
     const plistPath = path.join(tempDir, "Library", "LaunchAgents", "ai.fluxhive.runner.plist");
+    const unitPath = path.join(tempDir, ".config", "systemd", "user", "fluxhive-runner.service");
     if (fs.existsSync(plistPath)) fs.unlinkSync(plistPath);
+    if (fs.existsSync(unitPath)) fs.unlinkSync(unitPath);
 
     try {
       handleServiceCommand("restart");
