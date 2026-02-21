@@ -207,6 +207,10 @@ describe("handleServiceCommand", () => {
   });
 
   it("uninstall exits 0", async () => {
+    // Clear credentials so notifyDisconnect() short-circuits (avoids real HTTP)
+    delete process.env.FLUX_TOKEN;
+    delete process.env.FLUX_HOST;
+
     // Uninstall is async (notifyDisconnect → .finally). Use a no-op exit mock
     // so the .finally callback doesn't throw into an unhandled rejection.
     const exitCalls: number[] = [];
@@ -219,6 +223,9 @@ describe("handleServiceCommand", () => {
   });
 
   it("uninstall --clean removes ~/.flux directory", async () => {
+    delete process.env.FLUX_TOKEN;
+    delete process.env.FLUX_HOST;
+
     const fluxDir = path.join(tempDir, ".flux");
     fs.mkdirSync(path.join(fluxDir, "logs"), { recursive: true });
     fs.writeFileSync(path.join(fluxDir, "config.json"), "{}");
@@ -234,6 +241,9 @@ describe("handleServiceCommand", () => {
   });
 
   it("uninstall without --clean keeps ~/.flux directory", async () => {
+    delete process.env.FLUX_TOKEN;
+    delete process.env.FLUX_HOST;
+
     const fluxDir = path.join(tempDir, ".flux");
     fs.mkdirSync(path.join(fluxDir, "logs"), { recursive: true });
     fs.writeFileSync(path.join(fluxDir, "config.json"), "{}");
